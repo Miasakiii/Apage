@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# 允许 PR/推送并发时取消旧运行
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-and-tests:
+    name: Core 构建 + 单元测试（可靠门禁）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 .NET SDK（按 global.json 固定）
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: 还原并构建 Apage.Core
+        run: dotnet build Apage.Core/Apage.Core.csproj -c Release --nologo
+
+      - name: 运行单元测试
+        run: dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj -c Release --nologo
+
+  portable-build:
+    name: Portable 主项目构建（VS MSBuild）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 .NET SDK（供混合解决方案的 SDK 风格工程使用）
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # 复用仓库内受支持的构建入口：内部经 vswhere 定位 VS 2022 MSBuild，
+      # 按需设置 MSBuildSDKsPath 并关闭 workload 解析器，构建整个解决方案。
+      - name: 构建整个解决方案（build/build.ps1）
+        shell: pwsh
+        run: ./build/build.ps1 -Configuration Release

@@ -1,0 +1,88 @@
+/* ==========================================================================
+   Apage 设计令牌（CSS 变量版）
+   来源：docs/frontend-design.md §4，与 WPF 侧 Themes/Tokens.xaml 数值一一对应，
+   禁止各自魔改。改数值必须两侧同步。
+   ========================================================================== */
+
+:root {
+  /* ---- 4.1 颜色 · 强调色（深浅主题通用） ---- */
+  --accent:         #3B82F6;
+  --accent-hover:   #2563EB;
+  --accent-pressed: #1D4ED8;
+  --accent-soft:    rgba(59, 130, 246, .12);
+
+  /* ---- 4.1 颜色 · 浅色主题（默认） ---- */
+  --bg-window:      #F7F8FA;
+  --bg-surface:     #FFFFFF;
+  --bg-hover:       rgba(0, 0, 0, .05);
+  --bg-pressed:     rgba(0, 0, 0, .09);
+  --text-primary:   #1F2329;
+  --text-secondary: #6B7280;
+  --text-tertiary:  #9CA3AF;
+  --border:         rgba(0, 0, 0, .08);
+
+  /* ---- 4.1 语义色 ---- */
+  --shield:         #22C55E;
+  --danger:         #EF4444;
+  --warning:        #F59E0B;
+
+  /* ---- 4.2 字体（系统栈自动回落，不打包字体） ---- */
+  --font-family:    "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --text-xs:        11px;
+  --text-sm:        12px;
+  --text-base:      13px;
+  --text-md:        15px;
+  --text-lg:        20px;
+  --clock-size:     56px;
+  --clock-weight:   200;
+
+  /* ---- 4.3 间距（4px 网格） ---- */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-12: 48px;
+
+  /* ---- 4.3 圆角 ---- */
+  --r-sm:   4px;
+  --r-md:   8px;
+  --r-lg:   12px;
+  --r-pill: 999px;
+
+  /* ---- 4.3 阴影（只有两级） ---- */
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, .08);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, .16);
+
+  /* ---- 4.3 动效 ---- */
+  --dur-fast: 100ms;
+  --dur-med:  200ms;
+  --dur-slow: 320ms;
+  --ease:     cubic-bezier(.2, .8, .3, 1);
+}
+
+/* ---- 4.1 颜色 · 深色主题（跟随系统，或显式 data-theme="dark"） ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-window:      #1B1D21;
+    --bg-surface:     #26282E;
+    --bg-hover:       rgba(255, 255, 255, .06);
+    --bg-pressed:     rgba(255, 255, 255, .10);
+    --text-primary:   #E8EAED;
+    --text-secondary: #9AA0A6;
+    --text-tertiary:  #6B7280;
+    --border:         rgba(255, 255, 255, .10);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg-window:      #1B1D21;
+  --bg-surface:     #26282E;
+  --bg-hover:       rgba(255, 255, 255, .06);
+  --bg-pressed:     rgba(255, 255, 255, .10);
+  --text-primary:   #E8EAED;
+  --text-secondary: #9AA0A6;
+  --text-tertiary:  #6B7280;
+  --border:         rgba(255, 255, 255, .10);
+}

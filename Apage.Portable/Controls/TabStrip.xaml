@@ -1,0 +1,148 @@
+<UserControl x:Class="Apage.Portable.Controls.TabStrip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+      标签条（frontend-design.md §5.2）
+      根 Grid 不留背景：空白处不命中，落入 WindowChrome 标题区，可拖窗/双击最大化。
+      所有可点元素均标记 WindowChrome.IsHitTestVisibleInChrome="True"。
+    -->
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 标签列表：横向排布，底部与工具栏对齐 -->
+        <ItemsControl x:Name="TabItems" Grid.Column="0" VerticalAlignment="Bottom">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <!-- 单标签：宽 200、高 36；最小 96 的收缩策略留待 Phase 2 溢出处理 -->
+                    <Grid x:Name="TabRoot" Width="200" Height="36" Background="Transparent"
+                          WindowChrome.IsHitTestVisibleInChrome="True"
+                          MouseLeftButtonUp="Tab_MouseLeftButtonUp">
+                        <!-- 当前标签底：surface 白底 + 仅上两角 8px 圆角，与工具栏无缝衔接 -->
+                        <Border x:Name="ActiveBg" CornerRadius="8,8,0,0" Visibility="Collapsed"
+                                Background="{DynamicResource Apage.Brush.Surface}"/>
+                        <!-- 当前标签顶部 2px accent 指示条 -->
+                        <Border x:Name="ActiveAccentBar" Height="2" VerticalAlignment="Top"
+                                CornerRadius="8,8,0,0" Visibility="Collapsed"
+                                Background="{DynamicResource Apage.Brush.Accent}"/>
+                        <!-- 非当前标签 hover 圆角块（透明底，hover 出 Hover 令牌色） -->
+                        <Border x:Name="HoverBg" Margin="2,4" CornerRadius="8" Visibility="Collapsed"
+                                Background="{DynamicResource Apage.Brush.Hover}"/>
+                        <!-- 标签内容：favicon 16 + 标题（省略号截断）+ 关闭 ✕ -->
+                        <Grid Margin="12,0,8,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- 占位 favicon 圆块，接入真实站点图标后替换 -->
+                            <Ellipse Grid.Column="0" Width="16" Height="16"
+                                     Fill="{DynamicResource Apage.Brush.Pressed}"/>
+                            <TextBlock x:Name="TitleText" Grid.Column="1" Margin="8,0,4,0"
+                                       Text="{Binding Title}" FontSize="12" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+                            <!-- 关闭 ✕：默认隐藏，hover 或当前标签才显示（见 Triggers） -->
+                            <Button x:Name="CloseButton" Grid.Column="2" Width="16" Height="16"
+                                    Visibility="Collapsed" ToolTip="关闭标签"
+                                    Click="CloseButton_Click">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Grid WindowChrome.IsHitTestVisibleInChrome="True">
+                                            <Border x:Name="CloseBg" CornerRadius="4" Background="Transparent"/>
+                                            <TextBlock Text="✕" FontSize="9" HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="CloseBg" Property="Background"
+                                                        Value="{DynamicResource Apage.Brush.Pressed}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </Grid>
+                    </Grid>
+                    <DataTemplate.Triggers>
+                        <!-- 当前标签：白底 + accent 条 + 标题主色 + 常显 ✕ -->
+                        <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                            <Setter TargetName="ActiveBg" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ActiveAccentBar" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="CloseButton" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="TitleText" Property="Foreground"
+                                    Value="{DynamicResource Apage.Brush.TextPrimary}"/>
+                        </DataTrigger>
+                        <!-- hover 任意标签均显示 ✕ -->
+                        <DataTrigger Binding="{Binding IsMouseOver, ElementName=TabRoot}" Value="True">
+                            <Setter TargetName="CloseButton" Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <!-- 仅非当前标签 hover 出圆角块 -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsMouseOver, ElementName=TabRoot}" Value="True"/>
+                                <Condition Binding="{Binding IsCurrent}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="HoverBg" Property="Visibility" Value="Visible"/>
+                        </MultiDataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- 新建标签 +：固定最右，hover 旋转 90° 并变为强调色（100ms，只动 RenderTransform） -->
+        <Button x:Name="NewTabButton" Grid.Column="1" Width="28" Height="28"
+                VerticalAlignment="Center" Margin="4,0,8,0" ToolTip="新建标签"
+                Click="NewTabButton_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Grid WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Border x:Name="NewTabBg" CornerRadius="8" Background="Transparent"/>
+                        <TextBlock x:Name="NewTabGlyph" Text="+" FontSize="16"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Apage.Brush.TextPrimary}"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform x:Name="NewTabRotate" Angle="0"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="NewTabBg" Property="Background"
+                                    Value="{DynamicResource Apage.Brush.Hover}"/>
+                            <Setter TargetName="NewTabGlyph" Property="Foreground"
+                                    Value="{DynamicResource Apage.Brush.Accent}"/>
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="NewTabRotate"
+                                                         Storyboard.TargetProperty="Angle"
+                                                         To="90" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="NewTabRotate"
+                                                         Storyboard.TargetProperty="Angle"
+                                                         To="0" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+    </Grid>
+</UserControl>

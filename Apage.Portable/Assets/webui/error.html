@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>无法打开此页面</title>
+<link rel="stylesheet" href="tokens.css">
+<!-- 断网/DNS 错误页，规范来源：docs/frontend-design.md §7.4 -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: var(--font-family);
+    font-size: var(--text-base);
+    background: var(--bg-window);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .error-card {
+    text-align: center;
+    padding: var(--sp-8);
+    max-width: 420px;
+  }
+
+  .error-icon {
+    width: 64px;
+    height: 64px;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-6);
+  }
+
+  h1 {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    margin-bottom: var(--sp-3);
+  }
+
+  .reason {
+    color: var(--text-secondary);
+    margin-bottom: var(--sp-6);
+    line-height: 1.6;
+  }
+
+  #btn-retry {
+    font-family: inherit;
+    font-size: var(--text-base);
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--r-pill);
+    padding: var(--sp-2) var(--sp-8);
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease);
+  }
+
+  #btn-retry:hover   { background: var(--accent-hover); }
+  #btn-retry:active  { background: var(--accent-pressed); }
+
+  #btn-retry:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .error-code {
+    margin-top: var(--sp-6);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+  }
+</style>
+</head>
+<body>
+
+<div class="error-card">
+  <!-- 64px 线性图标：断开的网络 -->
+  <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+    <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+    <circle cx="12" cy="19.5" r=".5" fill="currentColor"/>
+    <line x1="3" y1="3" x2="21" y2="21"/>
+  </svg>
+
+  <h1>无法打开此页面</h1>
+  <p class="reason" id="reason">网络连接似乎断开了，请检查网络后重试。</p>
+  <button id="btn-retry" type="button">重试</button>
+  <p class="error-code" id="error-code">ERR_INTERNET_DISCONNECTED</p>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+    // 宿主可通过 ?code=ERR_XXX&reason=... 传入具体错误，缺省用占位文案
+    var params = new URLSearchParams(window.location.search);
+    var code = params.get('code');
+    var reason = params.get('reason');
+    if (code) document.getElementById('error-code').textContent = code;
+    if (reason) document.getElementById('reason').textContent = reason;
+    document.getElementById('btn-retry').addEventListener('click', function () {
+      window.location.reload();
+    });
+  })();
+</script>
+
+</body>
+</html>

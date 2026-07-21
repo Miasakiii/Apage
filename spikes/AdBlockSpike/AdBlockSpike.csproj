@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Spike：独立项目，不加入 Apage.sln -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>AdBlockSpike</AssemblyName>
+    <RootNamespace>AdBlockSpike</RootNamespace>
+  </PropertyGroup>
+
+</Project>

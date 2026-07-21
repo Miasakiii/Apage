@@ -1,0 +1,31 @@
+<Window x:Class="Apage.Spikes.WebMessage.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="WebMessage Spike" Width="980" Height="640"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="1*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="StatusText" Grid.ColumnSpan="2"
+                   Margin="8,6" FontWeight="SemiBold"
+                   Text="初始化中…"/>
+
+        <!-- 实时日志 -->
+        <TextBox x:Name="LogBox" Grid.Row="1" Grid.Column="0"
+                 Margin="8,0,4,8" IsReadOnly="True" AcceptsReturn="True"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                 FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap"/>
+
+        <!-- WebView2 预览（测试页本身无交互，仅证明导航/注入发生在真实页面） -->
+        <wv2:WebView2 x:Name="WebView" Grid.Row="1" Grid.Column="1"
+                      Margin="4,0,8,8"/>
+    </Grid>
+</Window>

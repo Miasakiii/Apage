@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WebMessage Spike Test Page</title>
+<script>
+// 本脚本随页面 head 在 document-start 阶段同步执行（DOM 尚未解析）。
+// 若注入脚本（AddScriptToExecuteOnDocumentCreatedAsync）先生效，此处 apageBridge 已可用。
+window.__docStartReadyState = document.readyState;
+window.__docStartAvailable = typeof window.apageBridge !== 'undefined';
+window.__docStartResult = null;
+window.__docStartError = null;
+if (window.__docStartAvailable) {
+    window.apageBridge.callBackend('ping', { from: 'document-start' })
+        .then(function (r) { window.__docStartResult = r; })
+        .catch(function (e) { window.__docStartError = String(e); });
+}
+</script>
+</head>
+<body style="font-family: sans-serif; margin: 24px;">
+<h1>WebMessage Spike</h1>
+<p>document-start 时 readyState：<b id="rs"></b></p>
+<p>document-start 时 apageBridge 可用：<b id="avail"></b></p>
+<script>
+document.getElementById('rs').textContent = window.__docStartReadyState;
+document.getElementById('avail').textContent = String(window.__docStartAvailable);
+</script>
+</body>
+</html>

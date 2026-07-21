@@ -1,0 +1,72 @@
+<UserControl x:Class="Apage.Portable.Views.BrowserTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             Background="#F7F8FA">
+    <Grid>
+        <!-- 初始化完成前隐藏（Hidden 仍参与布局、可正常初始化），配合 DefaultBackgroundColor 防白闪 -->
+        <wv2:WebView2 x:Name="WebView"
+                      Visibility="Hidden"
+                      CoreWebView2InitializationCompleted="WebView_CoreWebView2InitializationCompleted"/>
+
+        <!-- R1：WebView2 Runtime 缺失/初始化失败时的中文引导面板（绝不静默联网下载） -->
+        <Grid x:Name="RuntimeMissingPanel" Visibility="Collapsed" Background="#F7F8FA">
+            <Border MaxWidth="440"
+                    Padding="32"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="#FFFFFF"
+                    BorderBrush="#E5E7EB"
+                    BorderThickness="1"
+                    CornerRadius="12">
+                <StackPanel>
+                    <TextBlock x:Name="PanelTitle"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="#1F2329"
+                               Text="无法启动浏览器内核"/>
+                    <TextBlock Margin="0,12,0,0"
+                               FontSize="13"
+                               Foreground="#6B7280"
+                               LineHeight="20"
+                               Text="Apage 依赖系统已安装的 Microsoft Edge WebView2 Runtime。Windows 11 默认预装；部分 Windows 10 精简版可能缺失。请点击下方按钮前往微软官网手动下载安装，完成后重新启动 Apage。出于零联网原则，Apage 不会自动下载。"
+                               TextWrapping="Wrap"/>
+                    <TextBlock x:Name="PanelDetail"
+                               Margin="0,12,0,0"
+                               FontSize="12"
+                               Foreground="#9CA3AF"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed"/>
+                    <Button Margin="0,24,0,0"
+                            HorizontalAlignment="Left"
+                            Padding="16,8"
+                            Background="#3B82F6"
+                            BorderThickness="0"
+                            Click="OnDownloadRuntimeClick"
+                            Content="前往下载 WebView2 Runtime"
+                            Cursor="Hand"
+                            Foreground="#FFFFFF">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="border"
+                                        Padding="{TemplateBinding Padding}"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="8">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="#2563EB"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="#1D4ED8"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

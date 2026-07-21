@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    独立 Spike 3：WebView2 扩展能力摸底（docs/product-design.md 风险 R3）。
+    不加入 Apage.sln；构建：dotnet build spikes/ExtensionSpike/ExtensionSpike.csproj
+    注意：OutputType=Exe（控制台子系统）是有意的——spike 需要把实测输出写到 stdout/日志文件。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Apage.Spikes.Extension</RootNamespace>
+    <AssemblyName>ExtensionSpike</AssemblyName>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+  </ItemGroup>
+
+</Project>

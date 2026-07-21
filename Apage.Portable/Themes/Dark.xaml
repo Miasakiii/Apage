@@ -1,0 +1,12 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 深色主题色值（docs/frontend-design.md §4.1），key 与 Light.xaml 一一对应 -->
+    <Color x:Key="Apage.Color.WindowBg">#1B1D21</Color>
+    <Color x:Key="Apage.Color.Surface">#26282E</Color>
+    <Color x:Key="Apage.Color.Hover">#0FFFFFFF</Color><!-- rgba(255,255,255,.06) -->
+    <Color x:Key="Apage.Color.Pressed">#1AFFFFFF</Color><!-- rgba(255,255,255,.10) -->
+    <Color x:Key="Apage.Color.TextPrimary">#E8EAED</Color>
+    <Color x:Key="Apage.Color.TextSecondary">#9AA0A6</Color>
+    <Color x:Key="Apage.Color.TextTertiary">#6B7280</Color>
+    <Color x:Key="Apage.Color.Border">#1AFFFFFF</Color><!-- rgba(255,255,255,.10) -->
+</ResourceDictionary>

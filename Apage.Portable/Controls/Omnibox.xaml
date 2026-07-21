@@ -1,0 +1,217 @@
+<UserControl x:Class="Apage.Portable.Controls.Omnibox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Height="30">
+    <!--
+      地址栏 Omnibox —— 设计依据 docs/frontend-design.md §5.3
+      · 30px 全圆角胶囊：默认 Hover 底；聚焦 Surface 底 + 2px Accent 外框（100ms 过渡）
+      · 动画只动 Opacity / RenderTransform；下拉阴影用 Border 模拟（禁用 DropShadowEffect）
+      · 主题资源一律 DynamicResource，key 统一 Apage. 前缀
+    -->
+    <UserControl.Resources>
+        <!-- 建议项容器：hover -> Hover 底，选中 -> AccentSoft 底；组标题/分隔线行不可点 -->
+        <Style x:Key="SuggestItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Apage.Brush.Hover}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Apage.Brush.AccentSoft}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="SuggestItem_PreviewMouseLeftButtonUp"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="Header">
+                    <Setter Property="IsHitTestVisible" Value="False"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Separator">
+                    <Setter Property="IsHitTestVisible" Value="False"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 建议行模板：组首灰字小标题 / 组间 1px 分隔线 / 图标 16 + 标题 + 灰 URL -->
+        <DataTemplate x:Key="SuggestRowTemplate">
+            <Grid>
+                <TextBlock x:Name="Header" Visibility="Collapsed"
+                           Text="{Binding Title}" FontSize="11"
+                           Foreground="{DynamicResource Apage.Brush.TextTertiary}"
+                           Margin="10,8,10,2"/>
+                <Border x:Name="Sep" Visibility="Collapsed" Height="1" Margin="10,2"
+                        Background="{DynamicResource Apage.Brush.Border}"/>
+                <Grid x:Name="Entry" Visibility="Collapsed" Height="30">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Path Width="16" Height="16" Margin="10,0,0,0" VerticalAlignment="Center"
+                          Stretch="Uniform" Data="{Binding Icon}"
+                          Fill="{DynamicResource Apage.Brush.TextSecondary}"/>
+                    <TextBlock Grid.Column="1" MaxWidth="220" Margin="8,0,0,0"
+                               VerticalAlignment="Center" FontSize="13"
+                               Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+                    <TextBlock Grid.Column="2" Margin="8,0,10,0"
+                               VerticalAlignment="Center" FontSize="12"
+                               Text="{Binding Url}" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+                </Grid>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="Header">
+                    <Setter TargetName="Header" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Separator">
+                    <Setter TargetName="Sep" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Entry">
+                    <Setter TargetName="Entry" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Search">
+                    <Setter TargetName="Entry" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid x:Name="Root" RenderTransformOrigin="0.5,0.5">
+        <Grid.RenderTransform>
+            <ScaleTransform x:Name="PillScale" ScaleX="1" ScaleY="1"/>
+        </Grid.RenderTransform>
+        <!-- 聚焦过渡：仅 Opacity / RenderTransform，100ms，先快后稳缓动。
+             Style 触发器内 Storyboard 不能用 TargetName 引用命名元素（MC4011），
+             故缩放动画作用于 Grid 自身 RenderTransform，FocusRing 淡入淡出下沉到其自身 Style -->
+        <Grid.Style>
+            <Style TargetType="Grid">
+                <Style.Triggers>
+                    <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                        <Trigger.EnterActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                     To="1.0667" Duration="0:0:0.1">
+                                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </Trigger.EnterActions>
+                        <Trigger.ExitActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                     To="1" Duration="0:0:0.1">
+                                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </Trigger.ExitActions>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </Grid.Style>
+
+        <!-- 胶囊底（默认 Hover 底） -->
+        <Border CornerRadius="15" Background="{DynamicResource Apage.Brush.Hover}"/>
+        <!-- 聚焦态：Surface 底 + 2px Accent 外框，Opacity 淡入/淡出（自身 Style 监听 Root 焦点） -->
+        <Border x:Name="FocusRing" CornerRadius="15" Opacity="0"
+                Background="{DynamicResource Apage.Brush.Surface}"
+                BorderBrush="{DynamicResource Apage.Brush.Accent}" BorderThickness="2">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=Root}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.1">
+                                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.1">
+                                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.ExitActions>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左侧状态图标：https 锁 / http 警告 / 搜索放大镜（随 CurrentUrl 协议切换，代码后置赋值） -->
+            <Path x:Name="StatusIcon" Width="14" Height="14" Margin="12,0,0,0"
+                  VerticalAlignment="Center" Stretch="Uniform"
+                  Fill="{DynamicResource Apage.Brush.TextSecondary}"/>
+
+            <!-- 无边框透明底输入框 -->
+            <TextBox x:Name="UrlBox" Grid.Column="1"
+                     Background="Transparent" BorderThickness="0" FocusVisualStyle="{x:Null}"
+                     FontSize="13" Padding="8,0" VerticalContentAlignment="Center"
+                     Foreground="{DynamicResource Apage.Brush.TextPrimary}"
+                     CaretBrush="{DynamicResource Apage.Brush.Accent}"
+                     GotKeyboardFocus="UrlBox_GotKeyboardFocus"
+                     TextChanged="UrlBox_TextChanged"
+                     PreviewKeyDown="UrlBox_PreviewKeyDown"/>
+
+            <!-- 右侧拦截角标占位（默认隐藏，BlockedCount &gt; 0 时显示） -->
+            <Border x:Name="Badge" Grid.Column="2" Visibility="Collapsed"
+                    Height="18" Margin="0,0,8,0" CornerRadius="9"
+                    Background="{DynamicResource Apage.Brush.AccentSoft}">
+                <StackPanel Orientation="Horizontal" Margin="6,0,6,0">
+                    <Path x:Name="BadgeIcon" Width="10" Height="10" VerticalAlignment="Center"
+                          Stretch="Uniform" Fill="{DynamicResource Apage.Brush.Shield}"/>
+                    <TextBlock x:Name="BadgeText" Margin="3,0,0,0" FontSize="11"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource Apage.Brush.Shield}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- 下拉建议：宽与胶囊对齐、圆角 12、shadow-2 用双层扩散 Border 模拟 -->
+        <Popup x:Name="SuggestPopup"
+               PlacementTarget="{Binding ElementName=Root}"
+               Placement="Bottom" VerticalOffset="6"
+               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade"
+               Closed="SuggestPopup_Closed">
+            <Grid x:Name="PopupCard">
+                <Border CornerRadius="14" Margin="-3,5,-3,-9" Background="#14000000"/>
+                <Border CornerRadius="13" Margin="-1,2,-1,-5" Background="#0F000000"/>
+                <Border CornerRadius="12"
+                        Background="{DynamicResource Apage.Brush.Surface}"
+                        BorderBrush="{DynamicResource Apage.Brush.Border}" BorderThickness="1">
+                    <ListBox x:Name="SuggestList"
+                             Background="Transparent" BorderThickness="0" Padding="4"
+                             MaxHeight="310" Focusable="False"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ItemContainerStyle="{StaticResource SuggestItemStyle}"
+                             ItemTemplate="{StaticResource SuggestRowTemplate}"/>
+                </Border>
+            </Grid>
+        </Popup>
+    </Grid>
+</UserControl>
