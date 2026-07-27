@@ -17,6 +17,9 @@ public sealed class AppServices : IDisposable
     /// <summary>设置服务（{数据目录}\settings.json）。</summary>
     public SettingsService Settings { get; }
 
+    /// <summary>会话服务（{数据目录}\session.json）：退出保存打开的标签，启动恢复。</summary>
+    public SessionService Session { get; }
+
     /// <summary>单实例服务（按数据目录判定，R13）。</summary>
     public SingleInstanceService SingleInstance { get; }
 
@@ -28,6 +31,7 @@ public sealed class AppServices : IDisposable
 
         DataDirectory = Path.GetFullPath(dataDirectory);
         Settings = new SettingsService(Path.Combine(DataDirectory, "settings.json"));
+        Session = new SessionService(Path.Combine(DataDirectory, "session.json"));
         SingleInstance = new SingleInstanceService(DataDirectory);
     }
 

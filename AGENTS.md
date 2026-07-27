@@ -52,7 +52,7 @@ dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj
 ```
 
 - 只测 `Apage.Core` 的纯逻辑（决策 #18：Core 层纯逻辑优先单测）。
-- 现有可测目标：`AppPaths`（缓存目录 R7 策略）、`AppSettings`（隐私默认全开基线）、`SettingsService`（原子写 / 损坏 JSON 回落默认）。
+- 现有可测目标：`AppPaths`（缓存目录 R7 策略）、`AppSettings`（隐私默认全开基线）、`SettingsService`（原子写 / 损坏 JSON 回落默认）、`SessionService`（会话原子写 / 损坏回落空 / URL 可恢复过滤 + 索引收敛）。
 - 计划中的 `ScriptMatcher` / `AdBlockRuleEngine` / `ScriptMetadataParser` **尚未实现**；实现后补对应单测。
 
 ## 环境要求
