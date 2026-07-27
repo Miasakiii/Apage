@@ -168,15 +168,43 @@
                   VerticalAlignment="Center" Stretch="Uniform"
                   Fill="{DynamicResource Apage.Brush.TextSecondary}"/>
 
-            <!-- 无边框透明底输入框 -->
+            <!-- 无边框透明底输入框：显式重模为“裸”内容宿主，
+                 避免应用级 TextBox 隐式样式的方形边框/聚焦 accent 框套在圆形胶囊内（聚焦视觉由 Omnibox 胶囊接管） -->
             <TextBox x:Name="UrlBox" Grid.Column="1"
                      Background="Transparent" BorderThickness="0" FocusVisualStyle="{x:Null}"
                      FontSize="13" Padding="8,0" VerticalContentAlignment="Center"
                      Foreground="{DynamicResource Apage.Brush.TextPrimary}"
                      CaretBrush="{DynamicResource Apage.Brush.Accent}"
+                     SelectionBrush="{DynamicResource Apage.Brush.Accent}" SelectionOpacity="0.28"
                      GotKeyboardFocus="UrlBox_GotKeyboardFocus"
                      TextChanged="UrlBox_TextChanged"
-                     PreviewKeyDown="UrlBox_PreviewKeyDown"/>
+                     PreviewKeyDown="UrlBox_PreviewKeyDown">
+                <TextBox.Template>
+                    <ControlTemplate TargetType="TextBox">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Hidden"
+                                      VerticalAlignment="Center"/>
+                    </ControlTemplate>
+                </TextBox.Template>
+            </TextBox>
+
+            <!-- 空态水印：UrlBox 为空时显示，不拦截点击（点击直达下方 TextBox） -->
+            <TextBlock Grid.Column="1" Margin="8,0" Padding="8,0"
+                       IsHitTestVisible="False" VerticalAlignment="Center" FontSize="13"
+                       Text="搜索或输入网址"
+                       Foreground="{DynamicResource Apage.Brush.TextTertiary}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Text, ElementName=UrlBox}" Value="">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
             <!-- 右侧拦截角标占位（默认隐藏，BlockedCount &gt; 0 时显示） -->
             <Border x:Name="Badge" Grid.Column="2" Visibility="Collapsed"
