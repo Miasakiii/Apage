@@ -1,11 +1,12 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Restore + build the whole Apage solution (Apage.Core + Apage.Portable).
+    Restore + build the whole Apage solution (Apage.Core + Apage.Portable + Apage.Core.Tests).
 
 .DESCRIPTION
     1. Locates MSBuild via vswhere (VS 2022).
-    2. dotnet restore for Apage.Core (SDK-style, netstandard2.0).
+    2. dotnet restore for Apage.Core + Apage.Core.Tests (SDK-style; a clean
+       checkout needs both project.assets.json before the solution build).
     3. MSBuild /t:Restore for Apage.Portable (classic csproj + PackageReference).
     4. MSBuild full build of Apage.sln.
     Prints a per-step summary and exits non-zero if any step failed.
@@ -81,6 +82,12 @@ try {
 
     Invoke-Step 'dotnet restore Apage.Core' {
         dotnet restore Apage.Core/Apage.Core.csproj --nologo
+    }
+
+    # 测试工程也在 Apage.sln 内：干净环境（如 CI）缺少 project.assets.json
+    # 会让整解构建报 NETSDK1004，必须显式 restore。
+    Invoke-Step 'dotnet restore Apage.Core.Tests' {
+        dotnet restore Apage.Core.Tests/Apage.Core.Tests.csproj --nologo
     }
 
     Invoke-Step 'msbuild /t:Restore Apage.Portable' {
