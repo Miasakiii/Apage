@@ -2,7 +2,6 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Apage.Portable.Controls"
-        xmlns:views="clr-namespace:Apage.Portable.Views"
         Title="Apage" Width="1024" Height="640" MinWidth="640" MinHeight="480"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Apage.Brush.WindowBg}">
@@ -28,7 +27,7 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <controls:TabStrip Grid.Column="0"/>
+            <controls:TabStrip Grid.Column="0" x:Name="TabStrip"/>
             <controls:WindowButtons Grid.Column="1"/>
         </Grid>
 
@@ -44,49 +43,51 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- 左侧：导航三钮 32x32，字符图标占位（后续换 StreamGeometry） -->
+                <!-- 左侧：导航三钮 32x32，矢量线性图标 -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="BackButton" Width="32" Height="32" Content="←"
+                    <Button x:Name="BackButton" Width="32" Height="32"
                             Style="{DynamicResource Apage.Style.Button.Icon}"
-                            ToolTip="后退" Click="BackButton_Click"/>
-                    <Button x:Name="ForwardButton" Width="32" Height="32" Content="→" Margin="4,0,0,0"
+                            ToolTip="后退" Click="BackButton_Click">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Back}"/>
+                    </Button>
+                    <Button x:Name="ForwardButton" Width="32" Height="32" Margin="4,0,0,0"
                             Style="{DynamicResource Apage.Style.Button.Icon}"
-                            ToolTip="前进" Click="ForwardButton_Click"/>
-                    <Button x:Name="ReloadButton" Width="32" Height="32" Content="⟳" Margin="4,0,0,0"
+                            ToolTip="前进" Click="ForwardButton_Click">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Forward}"/>
+                    </Button>
+                    <Button x:Name="ReloadButton" Width="32" Height="32" Margin="4,0,0,0"
                             Style="{DynamicResource Apage.Style.Button.Icon}"
-                            ToolTip="刷新" Click="ReloadButton_Click"/>
+                            ToolTip="刷新" Click="ReloadButton_Click">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Reload}"/>
+                    </Button>
                 </StackPanel>
 
-                <!-- 中间：Omnibox 地址栏。
-                     契约控件 Apage.Portable.Controls.Omnibox 由其他代理提供，
-                     就绪后删除占位并启用下面被注释的一行：
-                     <controls:Omnibox Grid.Column="1" x:Name="Omnibox"/> -->
-                <Border Grid.Column="1" Height="30" Margin="8,0" CornerRadius="15"
-                        Background="{DynamicResource Apage.Brush.Hover}">
-                    <TextBlock Text="搜索或输入网址（Omnibox 占位）" FontSize="13"
-                               VerticalAlignment="Center" Margin="16,0,0,0"
-                               Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
-                </Border>
+                <!-- 中间：Omnibox 地址栏（回车导航；页面 URL/标题变化回填，接线见 MainWindow.xaml.cs） -->
+                <controls:Omnibox Grid.Column="1" x:Name="Omnibox" Margin="8,0" VerticalAlignment="Center"/>
 
-                <!-- 右侧：🛡 隐私盾 / ⬇ 下载 / 📜 脚本 / ⋯ 菜单 四钮占位 -->
+                <!-- 右侧：隐私盾 / 下载 / 脚本 / 菜单 四钮（矢量线性图标） -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="ShieldButton" Width="32" Height="32" Content="🛡"
-                            Style="{DynamicResource Apage.Style.Button.Icon}"
-                            ToolTip="隐私盾"/>
-                    <Button x:Name="DownloadsButton" Width="32" Height="32" Content="⬇" Margin="4,0,0,0"
-                            Style="{DynamicResource Apage.Style.Button.Icon}"
-                            ToolTip="下载"/>
-                    <Button x:Name="ScriptsButton" Width="32" Height="32" Content="📜" Margin="4,0,0,0"
-                            Style="{DynamicResource Apage.Style.Button.Icon}"
-                            ToolTip="脚本"/>
-                    <Button x:Name="MenuButton" Width="32" Height="32" Content="⋯" Margin="4,0,0,0"
-                            Style="{DynamicResource Apage.Style.Button.Icon}"
-                            ToolTip="菜单"/>
+                    <Button x:Name="ShieldButton" Width="32" Height="32"
+                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="隐私盾">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Shield}"/>
+                    </Button>
+                    <Button x:Name="DownloadsButton" Width="32" Height="32" Margin="4,0,0,0"
+                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="下载">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Download}"/>
+                    </Button>
+                    <Button x:Name="ScriptsButton" Width="32" Height="32" Margin="4,0,0,0"
+                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="脚本">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Script}"/>
+                    </Button>
+                    <Button x:Name="MenuButton" Width="32" Height="32" Margin="4,0,0,0"
+                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="菜单">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Menu}"/>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- 第 3 行：网页内容区（契约控件，导航按钮转发到它） -->
-        <views:BrowserTabView Grid.Row="2" x:Name="BrowserView"/>
+        <!-- 第 3 行：网页内容区（多标签宿主：TabManager 为每个标签在此放一个 BrowserTabView，仅当前可见） -->
+        <Grid Grid.Row="2" x:Name="TabHost"/>
     </Grid>
 </Window>

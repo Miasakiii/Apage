@@ -1,6 +1,24 @@
 # Apage 开发路线图
 
-> 内部文档 | 更新：2026-07-20
+> 内部文档 | 更新：2026-07-22
+>
+> v0.8 变更（UI 夸克式打磨 · 首轮 + 实机验证）：
+> - 图标体系：新增 Themes/Icons.xaml（14 个 StreamGeometry 线性图标 + 图标 Path 样式），窗口按钮/工具栏/标签条的 ASCII/Emoji 占位（←→⟳🛡⬇📜⋯ ─▢✕ ✕ +）全部换为矢量线性图标（frontend-design §10.5 落地）
+> - 网页图标 favicon：BrowserTabView 订阅 CoreWebView2.FaviconChanged + GetFaviconAsync 解码为 ImageSource → BrowserTab.Favicon → TabStrip 绑定；取网页自身声明的 favicon（非第三方图标服务），零额外联网；无图标回落占位块
+> - 最大化边缘裁切修复：拦截 WM_GETMINMAXINFO 把最大化限定到显示器工作区，消除自定义标题栏窗口最大化 ~7px 裁切且不遮挡任务栏（含 try/catch 兜底，钩子异常绝不崩溃）
+> - 搜索框聚焦修复：Omnibox 内层 TextBox 改用“裸”模板，消除应用级 TextBox 隐式样式在圆形胶囊内叠出的方形聚焦边框；补 accent 文本选区高亮
+> - 推进方式：先出静态走查稿（.uimock/index.html）对齐夸克方向后落地；保留蓝色令牌，只借夸克的圆润/留白/线性图标；已用 ComputerUse 真机点击复验 favicon / 搜索框聚焦 / 最大化三项均正常
+> - 待办（下轮）：**新建标签定位需像夸克那样始终追加在最后一个标签之后（用户反馈“走回头路”，待复现确认具体现象）**；拖拽排序、标签休眠、F11 全屏、地址栏聚焦放大幅度/选区浓度微调
+>
+> v0.7 变更（会话保存/恢复）：
+> - 新增 Core 层 SessionService + SessionState（原子写、损坏/缺失回落空会话、URL 可恢复过滤、索引收敛），配 17 项单测（决策 #18）
+> - 退出保存打开的标签、启动恢复上次标签；隐私标签在 CaptureSession 处即排除（roadmap 红线），BrowserTab 加 IsPrivate 结构性保障；恢复时用保存的标题占位（后台隐藏标签加载前也显示正确标题）
+> - Phase 2「会话保存」与 Phase 3「会话恢复」提前一并落地（急加载式恢复；懒加载/休眠归 Phase 2「标签休眠」）
+>
+> v0.6 变更（Phase 1 完成 + Phase 2 多标签会话落地）：
+> - App 启动装配：单实例判定（R13）+ 设置加载 + R7 缓存策略灌入 AppPaths + 依赖注入 MainWindow（此前 Core 服务已测但未接入运行时，现已实际生效）
+> - Omnibox 接入主窗口：回车导航、URL/搜索智能识别、地址回填；窗口标题随页面 DocumentTitle 同步（Phase 1 收尾两项完成）
+> - Phase 2 多标签会话：TabManager 驱动真实标签（每标签一个 BrowserTabView，经 BrowserLifecycleService 共享同一 Environment，仅当前可见），新建/关闭/切换已接入（关最后一个标签即关窗口）；拖拽排序 / 休眠 / 会话保存仍待做
 >
 > v0.5 变更（Phase 1 收尾 + 构建修复）：
 > - Phase 1 大部分完成：解决方案初始化、单标签浏览、DPI 清单、Runtime 检测引导、缓存策略均已落地；剩余窗口标题同步、Omnibox 接入主窗口、单文件发布实测
@@ -45,8 +63,8 @@
 
 - [x] 解决方案初始化：Apage.Core（.NET Standard 2.0）+ Apage.Portable（.NET FX 4.8 + WPF）
 - [x] Apage.Core 设定 `<LangVersion>latest</LangVersion>`（netstandard2.0 目标仍可用 C# 8+ 语法糖；record/init 补 IsExternalInit polyfill）
-- [x] 单标签浏览（前进/后退/刷新/地址栏）——BrowserTabView 导航契约 + 工具栏转发已完成；Omnibox 控件就绪但尚未接入主窗口（工具栏仍为占位）
-- [ ] 窗口标题同步
+- [x] 单标签浏览（前进/后退/刷新/地址栏）——BrowserTabView 导航契约 + 工具栏转发已完成；Omnibox 已接入主窗口（回车导航、URL/搜索智能识别、地址回填）
+- [x] 窗口标题同步（页面 DocumentTitleChanged → 窗口标题）
 - [x] PerMonitorV2 DPI 清单
 - [x] WebView2 运行时检测与缺失引导（R1；注册表探测 + 中文引导面板，手动下载，绝不静默联网下载）
 - [x] 缓存位置策略：默认宿主机 %TEMP%，可选纯便携模式（R7）
@@ -62,11 +80,11 @@
 
 **目标**：多标签可管理
 
-- [ ] 标签页创建/关闭/切换——TabStrip UI 已完成（桩数据版），待接入真实标签会话
+- [x] 标签页创建/关闭/切换——TabManager 驱动真实标签会话：每标签一个 BrowserTabView、经 BrowserLifecycleService 共享同一 Environment、仅当前可见；+/✕/点击切换已接入（关最后一个标签即关窗口）
 - [ ] 拖拽排序
 - [ ] 标签休眠（非活跃标签释放内存）
 - [x] 单实例管理——SingleInstanceService：Mutex 名 = "Apage/" + 数据目录 SHA256 前 16 位，initiallyOwned:false + WaitOne(0) 零等待检测，Abandoned 自动接管
-- [ ] 会话保存（退出时记录打开的标签）
+- [x] 会话保存（退出时记录打开的标签）——SessionService 原子写 session.json；隐私标签在 CaptureSession 处排除
 
 **交付物**：多标签浏览，非活跃标签自动休眠
 
@@ -80,7 +98,7 @@
 - [ ] 书签 CRUD + 从 Chrome/Edge 导入（HTML）
 - [ ] 历史记录 + 地址栏本地补全
 - [ ] 下载管理
-- [ ] 会话恢复（启动时恢复上次标签；**显式排除隐私标签 URL，绝不写入会话文件**）
+- [x] 会话恢复（启动时恢复上次标签；**显式排除隐私标签 URL，绝不写入会话文件**）——随会话保存一并落地：SessionService.Normalize 过滤不可恢复 URL + 收敛索引，BrowserTab.IsPrivate 结构性排除隐私标签
 - [x] 单实例语义按数据目录判定（已随 Phase 2 单实例管理一并落地：Mutex 名含数据目录哈希，同 U盘插不同机器互不冲突，对应 R13）
 
 **交付物**：书签、历史、下载、会话恢复可用

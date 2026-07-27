@@ -18,6 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 红线机械化检查（AGENTS.md 高风险约定）：csproj 通配符结构 + 零遥测/零联网上报扫描。
+      # 复用现有门禁作业，不新增第二套门禁体系。
+      - name: 红线检查（build/check-redlines.ps1）
+        shell: pwsh
+        run: ./build/check-redlines.ps1
+
       - name: 安装 .NET SDK（按 global.json 固定）
         uses: actions/setup-dotnet@v4
         with:

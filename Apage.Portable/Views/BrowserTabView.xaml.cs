@@ -5,6 +5,8 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Apage.Core.Configuration;
 using Apage.Core.Services;
 using Microsoft.Web.WebView2.Core;
@@ -38,10 +40,29 @@ public partial class BrowserTabView : UserControl
     public event EventHandler<string>? UrlChanged;
 
     /// <summary>
+    /// 站点图标变化（无图标时为 null）。图标由 WebView2 随页面加载取回——
+    /// 是网页自身声明的 favicon（非第三方图标服务），无额外联网请求。
+    /// </summary>
+    public event EventHandler<ImageSource?>? FaviconChanged;
+
+    /// <summary>
     /// 宿主可注入共享 Environment（通常来自 BrowserLifecycleService.GetSharedEnvironmentAsync()）。
     /// 不注入则按 AppPaths 缓存策略（R7）自行创建。必须在控件 Loaded 前赋值才生效。
     /// </summary>
     public CoreWebView2Environment? SharedEnvironment { get; set; }
+
+    /// <summary>
+    /// 宿主可注入内核生命周期门面：普通标签经此共享同一 Environment（Phase 2 多标签复用同一内核）。
+    /// 与 <see cref="SharedEnvironment"/> 二选一；均未设置时按 AppPaths（R7）自建。须在 Loaded 前赋值。
+    /// </summary>
+    public BrowserLifecycleService? Lifecycle { get; set; }
+
+    /// <summary>
+    /// 宿主可注入广告拦截引擎（§5.3，多标签共享同一实例，纯内存匹配无 IO）。须在 Loaded 前赋值。
+    /// 为 null 或无规则时完全不挂 WebResourceRequested——该管道会让页面加载暂停等待 UI 线程处理
+    /// （官方文档明确的性能开销），按需注册。
+    /// </summary>
+    public AdBlockRuleEngine? AdBlock { get; set; }
 
     /// <summary>底层 CoreWebView2（未就绪时为 null）。供广告拦截/隐私等事件管道（§5.4）挂接。</summary>
     public CoreWebView2? Core => WebView.CoreWebView2;
@@ -87,6 +108,16 @@ public partial class BrowserTabView : UserControl
             WebView.CoreWebView2?.Reload();
     }
 
+    /// <summary>
+    /// 释放该标签的 WebView2 控件与其 CoreWebView2（关标签时调用）。
+    /// 共享 Environment 不在此释放，仍归 BrowserLifecycleService 管理。
+    /// </summary>
+    public void DisposeCore()
+    {
+        try { WebView.Dispose(); }
+        catch { /* 关闭竞态下忽略 */ }
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_initStarted)
@@ -105,9 +136,15 @@ public partial class BrowserTabView : UserControl
         {
             TrySetDefaultBackgroundColor();
 
-            var environment = SharedEnvironment
-                ?? (CoreWebView2Environment)await CreateEnvironmentAsync(Path.Combine(AppPaths.CacheDirectory, "WebView2"))
-                    .ConfigureAwait(true);
+            // 环境解析优先级：显式注入的 SharedEnvironment > 生命周期门面共享 Environment > 按 R7 自建
+            var environment = SharedEnvironment;
+            if (environment == null)
+            {
+                environment = Lifecycle != null
+                    ? (CoreWebView2Environment)await Lifecycle.GetSharedEnvironmentAsync().ConfigureAwait(true)
+                    : (CoreWebView2Environment)await CreateEnvironmentAsync(Path.Combine(AppPaths.CacheDirectory, "WebView2"))
+                        .ConfigureAwait(true);
+            }
 
             await WebView.EnsureCoreWebView2Async(environment);
         }
@@ -146,7 +183,10 @@ public partial class BrowserTabView : UserControl
         // 完整事件链入口（§5.4）：后续广告拦截/DNT 头注入/历史记录等在此管道扩展
         core.DocumentTitleChanged += (s, e) => TitleChanged?.Invoke(this, core.DocumentTitle);
         core.SourceChanged += (s, e) => UrlChanged?.Invoke(this, core.Source);
+        core.FaviconChanged += OnFaviconChanged;
         core.NavigationCompleted += (s, e) => { /* 预留：历史记录、拦截统计等 */ };
+
+        HookAdBlock(core);
 
         WebView.Visibility = Visibility.Visible;
 
@@ -156,6 +196,76 @@ public partial class BrowserTabView : UserControl
             _pendingUrl = null;
             Navigate(url);
         }
+    }
+
+    // §5.3 广告拦截接入 WebView2 网络管道：
+    // - 必须用带 RequestSourceKinds 的三参过滤器重载（两参重载已被官方弃用：
+    //   跨源 iframe 的子资源不会触发 WebResourceRequested，广告 iframe 恰是重灾区）
+    // - 处理器同步判定即返回（引擎实测均值 24µs/URL，无需 GetDeferral）
+    // - 不拦截 Document 主文档：引擎暂不求值 $ 修饰符，泛匹配规则误杀主导航的代价过高
+    private void HookAdBlock(CoreWebView2 core)
+    {
+        var engine = AdBlock;
+        if (engine == null || engine.BlockCount == 0)
+            return;
+
+        core.AddWebResourceRequestedFilter(
+            "*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
+        core.WebResourceRequested += (s, e) =>
+        {
+            if (e.ResourceContext == CoreWebView2WebResourceContext.Document)
+                return;
+            if (engine.IsBlocked(e.Request.Uri))
+            {
+                // 空内容 + 403 即取消该请求（args.Response 一经赋值请求不再放行）
+                e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
+            }
+        };
+    }
+
+    // WebView2 favicon 变更：取回 PNG 流解码为 ImageSource（无图标则 null），广播给宿主回填标签。
+    private async void OnFaviconChanged(object? sender, object e)
+    {
+        var core = WebView.CoreWebView2;
+        if (core == null)
+            return;
+
+        ImageSource? icon = null;
+        try
+        {
+            if (!string.IsNullOrEmpty(core.FaviconUri))
+            {
+                using var stream = await core.GetFaviconAsync(CoreWebView2FaviconImageFormat.Png).ConfigureAwait(true);
+                icon = DecodeIcon(stream);
+            }
+        }
+        catch
+        {
+            icon = null; // 取图标失败不影响浏览，回落占位
+        }
+
+        FaviconChanged?.Invoke(this, icon);
+    }
+
+    private static ImageSource? DecodeIcon(Stream? stream)
+    {
+        if (stream == null)
+            return null;
+
+        // 拷到可定位的 MemoryStream，OnLoad 立即解码后即可释放源流
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        if (ms.Length == 0)
+            return null;
+        ms.Position = 0;
+
+        var bmp = new BitmapImage();
+        bmp.BeginInit();
+        bmp.CacheOption = BitmapCacheOption.OnLoad;
+        bmp.StreamSource = ms;
+        bmp.EndInit();
+        bmp.Freeze(); // 跨线程安全 + 可缓存
+        return bmp;
     }
 
     /// <summary>无协议输入自动补 https://；已带协议（含 about:、file:）原样使用。</summary>

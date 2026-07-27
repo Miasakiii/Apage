@@ -58,12 +58,17 @@
     </UserControl.Resources>
 
     <StackPanel Orientation="Horizontal">
-        <!-- 图标用字符占位，后续换内嵌 StreamGeometry 图标体系 -->
         <Button x:Name="MinButton" Style="{StaticResource WindowButtonStyle}"
-                Content="─" ToolTip="最小化" Click="MinButton_Click"/>
+                ToolTip="最小化" Click="MinButton_Click">
+            <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.WinMin}" Width="11" Height="11"/>
+        </Button>
         <Button x:Name="MaxButton" Style="{StaticResource WindowButtonStyle}"
-                Content="▢" ToolTip="最大化" Click="MaxButton_Click"/>
+                ToolTip="最大化" Click="MaxButton_Click">
+            <Path x:Name="MaxIcon" Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.WinMax}" Width="11" Height="11"/>
+        </Button>
         <Button x:Name="CloseButton" Style="{StaticResource CloseWindowButtonStyle}"
-                Content="✕" ToolTip="关闭" Click="CloseButton_Click"/>
+                ToolTip="关闭" Click="CloseButton_Click">
+            <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Close}" Width="11" Height="11"/>
+        </Button>
     </StackPanel>
 </UserControl>

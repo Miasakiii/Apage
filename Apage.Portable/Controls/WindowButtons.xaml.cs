@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace Apage.Portable.Controls
 {
@@ -29,12 +30,12 @@ namespace Apage.Portable.Controls
             SyncMaxGlyph();
         }
 
-        // 同步最大化按钮图标与提示（▢ 最大化 / ❐ 还原）
+        // 同步最大化按钮图标与提示（最大化→还原图标）
         private void SyncMaxGlyph()
         {
             var win = Window.GetWindow(this);
             bool maximized = win != null && win.WindowState == WindowState.Maximized;
-            MaxButton.Content = maximized ? "❐" : "▢";
+            MaxIcon.Data = (Geometry)FindResource(maximized ? "Apage.Geo.WinRestore" : "Apage.Geo.WinMax");
             MaxButton.ToolTip = maximized ? "还原" : "最大化";
         }
 

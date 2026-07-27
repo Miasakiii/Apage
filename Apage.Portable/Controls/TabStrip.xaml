@@ -1,126 +1,177 @@
 <UserControl x:Class="Apage.Portable.Controls.TabStrip"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Apage.Portable.Controls">
     <!--
       标签条（frontend-design.md §5.2）
       根 Grid 不留背景：空白处不命中，落入 WindowChrome 标题区，可拖窗/双击最大化。
       所有可点元素均标记 WindowChrome.IsHitTestVisibleInChrome="True"。
+      标签宽度由 TabStripPanel 等宽收缩（200 至 96）；再溢出则由 ScrollViewer 横向滚动，
+      并露出左右滚动按钮（不堆叠成两层）。
     -->
+    <UserControl.Resources>
+        <!-- 滚动按钮外观：与新建按钮同风格；置于标题区，故根 Grid 标 IsHitTestVisibleInChrome -->
+        <ControlTemplate x:Key="Apage.Template.TabScrollButton" TargetType="Button">
+            <Grid WindowChrome.IsHitTestVisibleInChrome="True">
+                <Border x:Name="Bg" CornerRadius="8" Background="Transparent"/>
+                <Path Style="{StaticResource Apage.Style.Icon}" Data="{TemplateBinding Tag}"
+                      Width="13" Height="13" StrokeThickness="2"
+                      Stroke="{DynamicResource Apage.Brush.TextSecondary}"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bg" Property="Background"
+                            Value="{DynamicResource Apage.Brush.Hover}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+    </UserControl.Resources>
+
     <Grid>
         <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
-        <!-- 标签列表：横向排布，底部与工具栏对齐 -->
-        <ItemsControl x:Name="TabItems" Grid.Column="0" VerticalAlignment="Bottom">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal"/>
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <!-- 单标签：宽 200、高 36；最小 96 的收缩策略留待 Phase 2 溢出处理 -->
-                    <Grid x:Name="TabRoot" Width="200" Height="36" Background="Transparent"
-                          WindowChrome.IsHitTestVisibleInChrome="True"
-                          MouseLeftButtonUp="Tab_MouseLeftButtonUp">
-                        <!-- 当前标签底：surface 白底 + 仅上两角 8px 圆角，与工具栏无缝衔接 -->
-                        <Border x:Name="ActiveBg" CornerRadius="8,8,0,0" Visibility="Collapsed"
-                                Background="{DynamicResource Apage.Brush.Surface}"/>
-                        <!-- 当前标签顶部 2px accent 指示条 -->
-                        <Border x:Name="ActiveAccentBar" Height="2" VerticalAlignment="Top"
-                                CornerRadius="8,8,0,0" Visibility="Collapsed"
-                                Background="{DynamicResource Apage.Brush.Accent}"/>
-                        <!-- 非当前标签 hover 圆角块（透明底，hover 出 Hover 令牌色） -->
-                        <Border x:Name="HoverBg" Margin="2,4" CornerRadius="8" Visibility="Collapsed"
-                                Background="{DynamicResource Apage.Brush.Hover}"/>
-                        <!-- 标签内容：favicon 16 + 标题（省略号截断）+ 关闭 ✕ -->
-                        <Grid Margin="12,0,8,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <!-- 占位 favicon 圆块，接入真实站点图标后替换 -->
-                            <Ellipse Grid.Column="0" Width="16" Height="16"
-                                     Fill="{DynamicResource Apage.Brush.Pressed}"/>
-                            <TextBlock x:Name="TitleText" Grid.Column="1" Margin="8,0,4,0"
-                                       Text="{Binding Title}" FontSize="12" VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis"
-                                       Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
-                            <!-- 关闭 ✕：默认隐藏，hover 或当前标签才显示（见 Triggers） -->
-                            <Button x:Name="CloseButton" Grid.Column="2" Width="16" Height="16"
-                                    Visibility="Collapsed" ToolTip="关闭标签"
-                                    Click="CloseButton_Click">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
-                                        <Grid WindowChrome.IsHitTestVisibleInChrome="True">
-                                            <Border x:Name="CloseBg" CornerRadius="4" Background="Transparent"/>
-                                            <TextBlock Text="✕" FontSize="9" HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"
-                                                       Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
-                                        </Grid>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="CloseBg" Property="Background"
-                                                        Value="{DynamicResource Apage.Brush.Pressed}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Button.Template>
-                            </Button>
+        <!-- 左滚动按钮：仅当标签溢出时可见（代码后置按滚动位置切换显隐/可用态） -->
+        <Button x:Name="ScrollLeftButton" Grid.Column="0" Width="24" Height="28" Margin="4,0,0,0"
+                VerticalAlignment="Center" Visibility="Collapsed" ToolTip="向左滚动标签"
+                Tag="{StaticResource Apage.Geo.Back}"
+                Template="{StaticResource Apage.Template.TabScrollButton}"
+                Click="ScrollLeftButton_Click"/>
+
+        <!-- 标签滚动区：Hidden 允许滚动但隐藏原生滚动条；宽度经绑定灌给 TabStripPanel 做收缩计算 -->
+        <ScrollViewer x:Name="TabScroller" Grid.Column="1"
+                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                      VerticalAlignment="Bottom" ScrollChanged="TabScroller_ScrollChanged">
+            <ItemsControl x:Name="TabItems"
+                          PreviewMouseLeftButtonDown="TabItems_PreviewMouseLeftButtonDown"
+                          PreviewMouseMove="TabItems_PreviewMouseMove"
+                          PreviewMouseLeftButtonUp="TabItems_PreviewMouseLeftButtonUp"
+                          LostMouseCapture="TabItems_LostMouseCapture">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <local:TabStripPanel
+                            AvailableWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <!-- 单标签：高 36，宽度交由 TabStripPanel 等宽收缩（不再硬编码 200） -->
+                        <Grid x:Name="TabRoot" Height="36" Background="Transparent"
+                              WindowChrome.IsHitTestVisibleInChrome="True"
+                              MouseLeftButtonUp="Tab_MouseLeftButtonUp"
+                              MouseDown="Tab_MouseDown">
+                            <!-- 当前标签底：surface 白底 + 仅上两角 8px 圆角，与工具栏无缝衔接 -->
+                            <Border x:Name="ActiveBg" CornerRadius="8,8,0,0" Visibility="Collapsed"
+                                    Background="{DynamicResource Apage.Brush.Surface}"/>
+                            <!-- 当前标签顶部 2px accent 指示条 -->
+                            <Border x:Name="ActiveAccentBar" Height="2" VerticalAlignment="Top"
+                                    CornerRadius="8,8,0,0" Visibility="Collapsed"
+                                    Background="{DynamicResource Apage.Brush.Accent}"/>
+                            <!-- 非当前标签 hover 圆角块（透明底，hover 出 Hover 令牌色） -->
+                            <Border x:Name="HoverBg" Margin="2,4" CornerRadius="8" Visibility="Collapsed"
+                                    Background="{DynamicResource Apage.Brush.Hover}"/>
+                            <!-- 标签内容：favicon 16 + 标题（省略号截断）+ 关闭 X -->
+                            <Grid Margin="12,0,8,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- favicon：网页图标(Image)覆盖在占位圆角块上，无图标时露出占位 -->
+                                <Grid Grid.Column="0" Width="16" Height="16">
+                                    <Border CornerRadius="4" Background="{DynamicResource Apage.Brush.Pressed}"/>
+                                    <Image Source="{Binding Favicon}" Stretch="Uniform"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                </Grid>
+                                <TextBlock x:Name="TitleText" Grid.Column="1" Margin="8,0,4,0"
+                                           Text="{Binding Title}" FontSize="12" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+                                <!-- 关闭 X：默认隐藏，hover 或当前标签才显示（见 Triggers） -->
+                                <Button x:Name="CloseButton" Grid.Column="2" Width="16" Height="16"
+                                        Visibility="Collapsed" ToolTip="关闭标签"
+                                        Click="CloseButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Grid WindowChrome.IsHitTestVisibleInChrome="True">
+                                                <Border x:Name="CloseBg" CornerRadius="4" Background="Transparent"/>
+                                                <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Close}"
+                                                      Width="11" Height="11" StrokeThickness="2.4"
+                                                      Stroke="{DynamicResource Apage.Brush.TextSecondary}"/>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="CloseBg" Property="Background"
+                                                            Value="{DynamicResource Apage.Brush.Pressed}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </Grid>
                         </Grid>
-                    </Grid>
-                    <DataTemplate.Triggers>
-                        <!-- 当前标签：白底 + accent 条 + 标题主色 + 常显 ✕ -->
-                        <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                            <Setter TargetName="ActiveBg" Property="Visibility" Value="Visible"/>
-                            <Setter TargetName="ActiveAccentBar" Property="Visibility" Value="Visible"/>
-                            <Setter TargetName="CloseButton" Property="Visibility" Value="Visible"/>
-                            <Setter TargetName="TitleText" Property="Foreground"
-                                    Value="{DynamicResource Apage.Brush.TextPrimary}"/>
-                        </DataTrigger>
-                        <!-- hover 任意标签均显示 ✕ -->
-                        <DataTrigger Binding="{Binding IsMouseOver, ElementName=TabRoot}" Value="True">
-                            <Setter TargetName="CloseButton" Property="Visibility" Value="Visible"/>
-                        </DataTrigger>
-                        <!-- 仅非当前标签 hover 出圆角块 -->
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding IsMouseOver, ElementName=TabRoot}" Value="True"/>
-                                <Condition Binding="{Binding IsCurrent}" Value="False"/>
-                            </MultiDataTrigger.Conditions>
-                            <Setter TargetName="HoverBg" Property="Visibility" Value="Visible"/>
-                        </MultiDataTrigger>
-                    </DataTemplate.Triggers>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                        <DataTemplate.Triggers>
+                            <!-- 当前标签：白底 + accent 条 + 标题主色 + 常显 X -->
+                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                <Setter TargetName="ActiveBg" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="ActiveAccentBar" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CloseButton" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="TitleText" Property="Foreground"
+                                        Value="{DynamicResource Apage.Brush.TextPrimary}"/>
+                            </DataTrigger>
+                            <!-- hover 任意标签均显示 X -->
+                            <DataTrigger Binding="{Binding IsMouseOver, ElementName=TabRoot}" Value="True">
+                                <Setter TargetName="CloseButton" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <!-- 仅非当前标签 hover 出圆角块 -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsMouseOver, ElementName=TabRoot}" Value="True"/>
+                                    <Condition Binding="{Binding IsCurrent}" Value="False"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter TargetName="HoverBg" Property="Visibility" Value="Visible"/>
+                            </MultiDataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- 右滚动按钮：仅当标签溢出时可见 -->
+        <Button x:Name="ScrollRightButton" Grid.Column="2" Width="24" Height="28"
+                VerticalAlignment="Center" Visibility="Collapsed" ToolTip="向右滚动标签"
+                Tag="{StaticResource Apage.Geo.Forward}"
+                Template="{StaticResource Apage.Template.TabScrollButton}"
+                Click="ScrollRightButton_Click"/>
 
         <!-- 新建标签 +：固定最右，hover 旋转 90° 并变为强调色（100ms，只动 RenderTransform） -->
-        <Button x:Name="NewTabButton" Grid.Column="1" Width="28" Height="28"
+        <Button x:Name="NewTabButton" Grid.Column="3" Width="28" Height="28"
                 VerticalAlignment="Center" Margin="4,0,8,0" ToolTip="新建标签"
                 Click="NewTabButton_Click">
             <Button.Template>
                 <ControlTemplate TargetType="Button">
                     <Grid WindowChrome.IsHitTestVisibleInChrome="True">
                         <Border x:Name="NewTabBg" CornerRadius="8" Background="Transparent"/>
-                        <TextBlock x:Name="NewTabGlyph" Text="+" FontSize="16"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Apage.Brush.TextPrimary}"
+                        <Path x:Name="NewTabGlyph" Style="{StaticResource Apage.Style.Icon}"
+                                   Data="{StaticResource Apage.Geo.Plus}" Width="16" Height="16"
+                                   Stroke="{DynamicResource Apage.Brush.TextSecondary}"
                                    RenderTransformOrigin="0.5,0.5">
-                            <TextBlock.RenderTransform>
+                            <Path.RenderTransform>
                                 <RotateTransform x:Name="NewTabRotate" Angle="0"/>
-                            </TextBlock.RenderTransform>
-                        </TextBlock>
+                            </Path.RenderTransform>
+                        </Path>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="NewTabBg" Property="Background"
                                     Value="{DynamicResource Apage.Brush.Hover}"/>
-                            <Setter TargetName="NewTabGlyph" Property="Foreground"
-                                    Value="{DynamicResource Apage.Brush.Accent}"/>
                             <Trigger.EnterActions>
                                 <BeginStoryboard>
                                     <Storyboard>

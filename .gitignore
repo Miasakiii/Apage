@@ -33,6 +33,9 @@ wallpapers/
 Thumbs.db
 Desktop.ini
 
+# ---- 临时截图（走查/对比用，不入库）----
+_*.png
+
 # ---- 智能体 / 工具本地产物（不入库；如需保留报告可自行取消忽略）----
 .qoder/
 .tmp-verify/
