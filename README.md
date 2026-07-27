@@ -97,12 +97,29 @@ Apage/
 # - Windows 10/11（WebView2 Runtime 已预装）
 # - .NET 8 SDK（构建 Apage.Core 共享层，版本经 global.json 固定）
 # - Visual Studio 2022（MSBuild + .NET Framework 4.8 目标包）
+```
 
-# 构建（旧式 csproj + SDK 风格混合解决方案，dotnet build 不支持，需用 VS MSBuild）
+**构建**：`Apage.sln` 是「旧式 v4.8 + SDK 风格」混合解决方案，`dotnet build Apage.sln` **不支持**（会失败），主项目必须用 VS 2022 的 MSBuild。仓库提供的封装脚本 [`build/build.ps1`](build/build.ps1) / [`build/build.sh`](build/build.sh) 会自动经 vswhere 定位 MSBuild、按需设置 `MSBuildSDKsPath` 并关闭 workload 解析器，**这是受支持的构建入口**：
+
+```powershell
+# PowerShell（推荐）：Restore + 构建整个解决方案（默认 Release）
+build\build.ps1
+build\build.ps1 -Configuration Debug
+```
+
+```bash
+# Git Bash：一条命令验证（内部转调 build/build.ps1）
+build/build.sh            # 默认 Release
+build/build.sh Debug
+```
+
+脚本等价于以下手动步骤：
+
+```powershell
 # 方式 A：VS Installer 已勾选「.NET SDK」组件（推荐，一劳永逸）
 msbuild Apage.Portable\Apage.Portable.csproj /t:Restore,Build /p:Configuration=Release
 
-# 方式 B：VS 缺少「.NET SDK」组件时，临时指定 SDK 路径（PowerShell）
+# 方式 B：VS 缺少「.NET SDK」组件时，临时指定 SDK 路径（须用 .NET 8 SDK，10.x 会触发 NETSDK1216）
 $env:MSBuildSDKsPath = "C:\Program Files\dotnet\sdk\8.0.423\Sdks"
 $env:MSBuildEnableWorkloadResolver = "false"
 msbuild Apage.Portable\Apage.Portable.csproj /t:Restore,Build /p:Configuration=Release

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Apage UI 走查稿 · 夸克式打磨</title>
+<style>
+  /* ===== 设计令牌（与 frontend-design.md §4 一一对应，蓝色系保留） ===== */
+  :root{
+    --accent:#3B82F6; --accent-hover:#2563EB; --accent-pressed:#1D4ED8;
+    --accent-soft:rgba(59,130,246,.12);
+    --bg-window:#F7F8FA; --bg-surface:#FFFFFF;
+    --bg-hover:rgba(0,0,0,.05); --bg-pressed:rgba(0,0,0,.09);
+    --text-1:#1F2329; --text-2:#6B7280; --text-3:#9CA3AF;
+    --border:rgba(0,0,0,.08);
+    --shield:#22C55E;
+    --r-sm:4px; --r-md:8px; --r-lg:12px; --r-pill:999px;
+    --shadow-1:0 1px 3px rgba(0,0,0,.08);
+    --shadow-2:0 10px 30px rgba(0,0,0,.16);
+    --ease:cubic-bezier(.2,.8,.3,1);
+    --font:"Segoe UI Variable","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:var(--font); color:var(--text-1);
+    background:#EAECEF;
+    background-image:radial-gradient(1200px 600px at 50% -10%, #fff, #E7EAEF);
+    padding:40px 24px 80px; line-height:1.5;
+  }
+  .wrap{max-width:1240px;margin:0 auto}
+  .hd{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+  .hd h1{font-size:22px;font-weight:650;letter-spacing:.2px}
+  .hd .sub{color:var(--text-2);font-size:13px}
+  .legend{color:var(--text-3);font-size:12px;margin-bottom:26px}
+  .legend b{color:var(--accent)}
+  .sect-label{font-size:12px;color:var(--text-3);margin:34px 0 12px;
+    text-transform:uppercase;letter-spacing:1.5px;font-weight:600}
+
+  /* ===== 图标基座 ===== */
+  .i{width:18px;height:18px;stroke:currentColor;fill:none;
+     stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;display:block}
+  .i-sm{width:15px;height:15px}
+  .i-lg{width:22px;height:22px}
+
+  /* ===== 浏览器窗口外壳 ===== */
+  .win{
+    width:100%;border-radius:14px;overflow:hidden;
+    box-shadow:var(--shadow-2);background:var(--bg-window);
+    border:1px solid rgba(0,0,0,.06);
+  }
+  /* 标签条 40px（夸克式加一点空气） */
+  .tabstrip{
+    height:40px;display:flex;align-items:flex-end;
+    padding:0 6px 0 8px;background:var(--bg-window);gap:2px;
+  }
+  .tab{
+    position:relative;height:34px;width:210px;display:flex;align-items:center;
+    gap:8px;padding:0 8px 0 12px;border-radius:10px 10px 0 0;
+    color:var(--text-2);font-size:12.5px;cursor:default;
+    transition:background var(--ease) .12s;
+  }
+  .tab .fav{width:16px;height:16px;border-radius:5px;flex:0 0 auto;
+    background:linear-gradient(135deg,#c7d2fe,#a5b4fc)}
+  .tab .ttl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tab .x{width:18px;height:18px;border-radius:6px;display:flex;
+    align-items:center;justify-content:center;color:var(--text-3);opacity:0;
+    transition:.12s var(--ease)}
+  .tab:hover{background:var(--bg-hover)}
+  .tab:hover .x{opacity:1}
+  .tab .x:hover{background:var(--bg-pressed);color:var(--text-1)}
+  .tab.active{
+    background:var(--bg-surface);color:var(--text-1);font-weight:550;
+    box-shadow:0 -1px 2px rgba(0,0,0,.04);
+  }
+  .tab.active .x{opacity:1}
+  .tab.active::after{ /* 顶部 accent 指示条 */
+    content:"";position:absolute;left:10px;right:10px;top:0;height:2px;
+    background:var(--accent);border-radius:2px;
+  }
+  .newtab{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;
+    justify-content:center;color:var(--text-2);margin:0 2px 2px 4px;cursor:default;
+    transition:.12s var(--ease)}
+  .newtab:hover{background:var(--bg-hover);color:var(--accent)}
+  .winbtns{display:flex;margin-left:auto;align-items:center;gap:0}
+  .wb{width:44px;height:34px;display:flex;align-items:center;justify-content:center;
+    color:var(--text-2);border-radius:8px;margin:0 1px 3px;transition:.12s var(--ease)}
+  .wb:hover{background:var(--bg-hover);color:var(--text-1)}
+  .wb.close:hover{background:#E81123;color:#fff}
+
+  /* 工具栏 48px */
+  .toolbar{
+    height:48px;display:flex;align-items:center;gap:6px;padding:0 10px;
+    background:var(--bg-surface);border-bottom:1px solid var(--border);
+  }
+  .navbtn{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;
+    justify-content:center;color:var(--text-1);transition:.12s var(--ease)}
+  .navbtn:hover{background:var(--bg-hover)}
+  .navbtn.disabled{color:var(--text-3)}
+  .navbtn.disabled:hover{background:transparent}
+  .omni{
+    flex:1;height:36px;border-radius:var(--r-pill);display:flex;align-items:center;
+    gap:8px;padding:0 12px;margin:0 6px;background:var(--bg-hover);
+    color:var(--text-2);font-size:13px;transition:.12s var(--ease);
+  }
+  .omni .host{color:var(--text-1)}
+  .omni .host .dim{color:var(--text-3)}
+  .omni.focused{
+    background:var(--bg-surface);box-shadow:0 0 0 2px var(--accent),var(--shadow-1);
+    color:var(--text-1);
+  }
+  .omni .lock{color:var(--shield)}
+  .shieldchip{margin-left:auto;display:flex;align-items:center;gap:4px;height:22px;
+    padding:0 8px;border-radius:var(--r-pill);background:var(--accent-soft);
+    color:var(--accent);font-size:11.5px;font-weight:600}
+  .toolicon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;
+    justify-content:center;color:var(--text-1);position:relative;transition:.12s var(--ease)}
+  .toolicon:hover{background:var(--bg-hover)}
+  .toolicon .dot{position:absolute;top:6px;right:7px;min-width:14px;height:14px;
+    padding:0 3px;border-radius:7px;background:var(--shield);color:#fff;font-size:9px;
+    display:flex;align-items:center;justify-content:center;font-weight:700}
+
+  /* ===== 新标签页（内容区，带壁纸+磨砂） ===== */
+  .ntp{
+    height:470px;position:relative;overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% 120%, rgba(0,0,0,.34), transparent 60%),
+      linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,.28)),
+      linear-gradient(150deg,#5b7cfa 0%,#8b6ff0 42%,#c56 fc 100%),
+      linear-gradient(150deg,#6a8bff,#9d7bf0);
+    color:#fff;display:flex;flex-direction:column;align-items:center;
+  }
+  .ntp .topright{position:absolute;top:16px;right:20px;display:flex;gap:6px}
+  .ntp .topright .g{width:34px;height:34px;border-radius:10px;display:flex;
+    align-items:center;justify-content:center;color:#fff;
+    background:rgba(255,255,255,.14);backdrop-filter:blur(8px)}
+  .clock{margin-top:64px;font-size:58px;font-weight:200;letter-spacing:2px;
+    text-shadow:0 1px 10px rgba(0,0,0,.35)}
+  .date{font-size:14px;opacity:.85;margin-top:2px;text-shadow:0 1px 8px rgba(0,0,0,.4)}
+  .searchbox{
+    margin-top:30px;width:520px;height:50px;border-radius:var(--r-pill);
+    display:flex;align-items:center;gap:12px;padding:0 20px;
+    background:rgba(255,255,255,.20);backdrop-filter:blur(20px) saturate(1.5);
+    border:1px solid rgba(255,255,255,.35);box-shadow:0 8px 24px rgba(0,0,0,.16);
+    color:#fff;font-size:14px;
+  }
+  .searchbox .eng{width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,.28);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .searchbox .ph{opacity:.9}
+  .shortcuts{margin-top:34px;display:flex;gap:20px}
+  .sc{width:64px;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .sc .tile{width:60px;height:60px;border-radius:18px;display:flex;align-items:center;
+    justify-content:center;font-size:20px;font-weight:700;
+    background:rgba(255,255,255,.20);backdrop-filter:blur(16px);
+    border:1px solid rgba(255,255,255,.28);transition:.15s var(--ease)}
+  .sc:hover .tile{transform:translateY(-3px);box-shadow:0 10px 22px rgba(0,0,0,.22)}
+  .sc.add .tile{border-style:dashed;font-weight:400;font-size:24px;opacity:.85}
+  .sc .lbl{font-size:11.5px;opacity:.9;text-shadow:0 1px 6px rgba(0,0,0,.4)}
+  .privacy{
+    margin-top:auto;margin-bottom:26px;display:flex;align-items:center;gap:10px;
+    height:40px;padding:0 18px;border-radius:var(--r-pill);
+    background:rgba(255,255,255,.16);backdrop-filter:blur(14px);
+    border:1px solid rgba(255,255,255,.24);font-size:13px;
+  }
+  .privacy .dot{width:9px;height:9px;border-radius:50%;background:var(--shield);
+    box-shadow:0 0 8px var(--shield)}
+  .privacy b{color:#eafff1;font-weight:700}
+
+  /* ===== 组件板 ===== */
+  .board{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .card{background:var(--bg-surface);border:1px solid var(--border);
+    border-radius:var(--r-lg);padding:18px 20px;box-shadow:var(--shadow-1)}
+  .card h3{font-size:13px;color:var(--text-2);margin-bottom:14px;font-weight:600}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .swatch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2)}
+  .swatch i{width:22px;height:22px;border-radius:6px;border:1px solid var(--border)}
+  .iconset{display:flex;flex-wrap:wrap;gap:6px}
+  .icochip{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;
+    justify-content:center;color:var(--text-1);background:var(--bg-window);
+    border:1px solid var(--border)}
+  .note{font-size:12.5px;color:var(--text-2);line-height:1.7}
+  .note b{color:var(--text-1)}
+  .kbd{display:inline-block;padding:1px 6px;border:1px solid var(--border);
+    border-bottom-width:2px;border-radius:5px;font-size:11px;background:#fafafa}
+  .omni-demo{margin:6px 0 2px}
+  .fill{height:200px;display:flex;align-items:center;justify-content:center;
+    color:var(--text-3);font-size:13px;background:
+    repeating-linear-gradient(45deg,#fafbfc,#fafbfc 12px,#f4f6f8 12px,#f4f6f8 24px)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd">
+    <h1>Apage · UI 走查稿</h1>
+    <span class="sub">夸克式打磨 · 保留蓝色令牌 · SVG 线性图标</span>
+  </div>
+  <div class="legend">
+    强调色 <b>#3B82F6</b> ·  外壳 80→88px(标签条 40 + 工具栏 48) · 圆角 8–14 · 线性图标 stroke 1.8 ·
+    以下所有图标即为待接入 WPF <b>StreamGeometry</b> 的矢量源
+  </div>
+
+  <!-- ============ 主窗口：外壳 + 新标签页 ============ -->
+  <div class="sect-label">主窗口 · 外壳 + 新标签页（内容区）</div>
+  <div class="win">
+    <!-- 标签条 -->
+    <div class="tabstrip">
+      <div class="tab active">
+        <span class="fav"></span><span class="ttl">新标签页</span>
+        <span class="x"><svg class="i i-sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+      </div>
+      <div class="tab">
+        <span class="fav" style="background:linear-gradient(135deg,#fca5a5,#f87171)"></span>
+        <span class="ttl">Apage 产品设计文档</span>
+        <span class="x"><svg class="i i-sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+      </div>
+      <div class="tab">
+        <span class="fav" style="background:linear-gradient(135deg,#6ee7b7,#34d399)"></span>
+        <span class="ttl">GitHub</span>
+        <span class="x"><svg class="i i-sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+      </div>
+      <div class="newtab" title="新建标签">
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </div>
+      <div class="winbtns">
+        <div class="wb" title="最小化"><svg class="i i-sm" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></div>
+        <div class="wb" title="最大化"><svg class="i i-sm" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg></div>
+        <div class="wb close" title="关闭"><svg class="i i-sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+      </div>
+    </div>
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <div class="navbtn" title="后退"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="navbtn disabled" title="前进"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div class="navbtn" title="刷新"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-.5 4M20 5v6h-6"/></svg></div>
+      <div class="omni focused">
+        <svg class="i i-sm lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+        <span class="host">新标签页</span>
+        <span class="ph" style="color:var(--text-3);margin-left:2px">— 搜索或输入网址</span>
+      </div>
+      <div class="toolicon" title="隐私盾"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.2-2.9 7.4-7 8.5-4.1-1.1-7-4.3-7-8.5V6z"/></svg><span class="dot">7</span></div>
+      <div class="toolicon" title="下载"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M5 20h14"/></svg></div>
+      <div class="toolicon" title="脚本"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></div>
+      <div class="toolicon" title="菜单"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg></div>
+    </div>
+    <!-- 新标签页内容 -->
+    <div class="ntp">
+      <div class="topright">
+        <div class="g" title="设置"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></div>
+        <div class="g" title="壁纸"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4-4 3 3 3-4 4 5"/></svg></div>
+      </div>
+      <div class="clock">14:32</div>
+      <div class="date">7月22日 星期三</div>
+      <div class="searchbox">
+        <span class="eng">B</span>
+        <svg class="i" viewBox="0 0 24 24" style="stroke:#fff"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <span class="ph">搜索或输入网址</span>
+      </div>
+      <div class="shortcuts">
+        <div class="sc"><div class="tile">G</div><div class="lbl">Google</div></div>
+        <div class="sc"><div class="tile">GH</div><div class="lbl">GitHub</div></div>
+        <div class="sc"><div class="tile">B</div><div class="lbl">Bilibili</div></div>
+        <div class="sc"><div class="tile">知</div><div class="lbl">知乎</div></div>
+        <div class="sc"><div class="tile">▶</div><div class="lbl">YouTube</div></div>
+        <div class="sc add"><div class="tile">+</div><div class="lbl">添加</div></div>
+      </div>
+      <div class="privacy">
+        <span class="dot"></span>本周已拦截 <b>1,283</b> 条追踪 · <b>342</b> 个广告
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 组件细节 ============ -->
+  <div class="sect-label">组件细节 · 状态 · 图标库 · 说明</div>
+  <div class="board">
+    <!-- 地址栏状态 -->
+    <div class="card">
+      <h3>地址栏 Omnibox · 三态</h3>
+      <div class="omni-demo"><div class="toolbar" style="height:auto;background:transparent;border:0;padding:0">
+        <div class="omni" style="margin:0">
+          <svg class="i i-sm lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+          <span class="host">example.com<span class="dim">/path</span></span>
+          <span class="shieldchip"><svg class="i i-sm" viewBox="0 0 24 24" style="stroke:var(--accent)"><path d="M12 3l7 3v5c0 4.2-2.9 7.4-7 8.5-4.1-1.1-7-4.3-7-8.5V6z"/></svg>3</span>
+        </div>
+      </div></div>
+      <div class="note" style="margin-top:6px">已加载态：https 锁(绿) + 主机名高亮 + 本页拦截 <b>3</b> 角标</div>
+      <div class="omni-demo" style="margin-top:14px"><div class="omni focused" style="margin:0">
+        <svg class="i i-sm" viewBox="0 0 24 24" style="stroke:var(--text-3)"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <span class="host">git<span style="border-left:1.5px solid var(--accent);margin-left:1px"></span></span>
+        <span style="color:var(--text-3);margin-left:4px">搜索 “git”</span>
+      </div></div>
+      <div class="note" style="margin-top:6px">聚焦/输入态：白底 + 2px accent 外圈 + 放大 3%；首行提示搜索意图</div>
+    </div>
+
+    <!-- 图标库 -->
+    <div class="card">
+      <h3>线性图标库（stroke 1.8 · 24 viewBox · 直接转 StreamGeometry）</h3>
+      <div class="iconset">
+        <div class="icochip" title="后退"><svg class="i" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div>
+        <div class="icochip" title="前进"><svg class="i" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="icochip" title="刷新"><svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-.5 4M20 5v6h-6"/></svg></div>
+        <div class="icochip" title="搜索"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></div>
+        <div class="icochip" title="锁"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>
+        <div class="icochip" title="盾"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.2-2.9 7.4-7 8.5-4.1-1.1-7-4.3-7-8.5V6z"/></svg></div>
+        <div class="icochip" title="下载"><svg class="i" viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M5 20h14"/></svg></div>
+        <div class="icochip" title="脚本"><svg class="i" viewBox="0 0 24 24"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></div>
+        <div class="icochip" title="菜单"><svg class="i" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg></div>
+        <div class="icochip" title="加号"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+        <div class="icochip" title="关闭"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+        <div class="icochip" title="最小化"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></div>
+        <div class="icochip" title="最大化"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg></div>
+        <div class="icochip" title="还原"><svg class="i" viewBox="0 0 24 24"><rect x="8" y="4" width="12" height="12" rx="2.5"/><path d="M4 8v10a2 2 0 002 2h10"/></svg></div>
+        <div class="icochip" title="设置"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></div>
+        <div class="icochip" title="壁纸"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4-4 3 3 3-4 4 5"/></svg></div>
+      </div>
+      <div class="note" style="margin-top:14px">全部替换现有 ASCII/Emoji 占位（←→⟳🛡⬇📜⋯ ─▢✕），风格统一、DPI 清晰</div>
+    </div>
+
+    <!-- 最大化修复 -->
+    <div class="card">
+      <h3>最大化边缘裁切修复</h3>
+      <div class="note">
+        <b>问题：</b>WPF <span class="kbd">WindowChrome</span> 自定义标题栏窗口最大化时，窗口实际外扩约
+        <b>7–8px</b>（等于 resize 边框），导致标签条右侧的窗口按钮和内容被屏幕边缘裁掉。<br><br>
+        <b>方案：</b>最大化时给根容器加动态 <span class="kbd">Margin=7</span>（用
+        <span class="kbd">SystemParameters</span> 精确取值 + <span class="kbd">WindowState</span> 触发器切换），
+        还原时归零；工具栏与内容随之正确对齐，最大化下也不裁边。
+      </div>
+    </div>
+
+    <!-- 交互打磨 -->
+    <div class="card">
+      <h3>交互打磨（夸克式手感）</h3>
+      <div class="note">
+        · 图标按钮 hover 出 <b>8px 圆角</b>底 + 100ms 缓动；关闭按钮 hover 红。<br>
+        · 新建 <b>+</b> hover 旋转 90°，标签开合 200ms 位移动画。<br>
+        · 地址栏聚焦放大 3% + accent 外圈；<span class="kbd">Esc</span> 失焦回填原地址。<br>
+        · 标签中键关闭、双击空白新建、当前标签常显 ✕。<br>
+        · 全部动效走 <span class="kbd">RenderTransform/Opacity</span>，尊重系统「减少动画」。
+      </div>
+    </div>
+  </div>
+
+  <div class="sect-label">网页加载态（外壳同一套，仅内容区变）</div>
+  <div class="win">
+    <div class="tabstrip">
+      <div class="tab active"><span class="fav" style="background:linear-gradient(135deg,#fca5a5,#f87171)"></span><span class="ttl">Example Domain</span><span class="x"><svg class="i i-sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+      <div class="newtab"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+      <div class="winbtns">
+        <div class="wb"><svg class="i i-sm" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></div>
+        <div class="wb"><svg class="i i-sm" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg></div>
+        <div class="wb close"><svg class="i i-sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <div class="navbtn"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="navbtn disabled"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div class="navbtn"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-.5 4M20 5v6h-6"/></svg></div>
+      <div class="omni">
+        <svg class="i i-sm lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+        <span class="host">example.com<span class="dim">/</span></span>
+      </div>
+      <div class="toolicon"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.2-2.9 7.4-7 8.5-4.1-1.1-7-4.3-7-8.5V6z"/></svg></div>
+      <div class="toolicon"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M5 20h14"/></svg></div>
+      <div class="toolicon"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></div>
+      <div class="toolicon"><svg class="i i-lg" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg></div>
+    </div>
+    <div class="fill">网页内容区（WebView2） — 外壳与新标签页共用同一套令牌与图标</div>
+  </div>
+
+</div>
+</body>
+</html>
