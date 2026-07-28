@@ -13,6 +13,9 @@ concurrency:
 
 jobs:
   core-and-tests:
+    # 此 job 的 name 是 main 分支保护规则中的「必需状态检查」上下文（红线检查 + 单测的合并前强制点）。
+    # 若重命名，必须同步更新仓库 Settings → Branches → main 保护规则中的 required status check，
+    # 否则 PR 将永远等待一个不再上报的检查而无法合并。
     name: Core 构建 + 单元测试（可靠门禁）
     runs-on: windows-latest
     steps:
