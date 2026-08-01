@@ -1,0 +1,3 @@
+# 换行符策略：仓库统一存 LF；Windows 检出按平台转 CRLF（此前无 .gitattributes/autocrlf，导致工作区 CRLF 被整树误报为已修改）。
+# text=auto：文本文件提交时 CRLF→LF；二进制（含 NUL）自动识别为 binary，不做转换。
+* text=auto
