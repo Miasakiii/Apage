@@ -756,6 +756,15 @@ AvalonEdit 是 .NET 生态中最适合的轻量代码编辑器，不增加显著
 
 **交付物**：GM_* API 全覆盖，安全模型完整
 
+#### Phase 7d：开发者工具（F12 DevTools + 反调试过滤）
+
+详见 [roadmap.md](roadmap.md) Phase 7d 与 [product-design.md](product-design.md) §5.8（v0.9 规划）。与脚本管线的接口约定：
+
+- 反调试 shim 与用户脚本共用 `AddScriptToExecuteOnDocumentCreated` 管线；
+- **注入顺序**：反调试 shim → 用户脚本（document-start）→ 页面脚本；shim 独立命名空间（IIFE 私有），不向页面暴露任何符号；
+- shim 仅处理动态代码（`eval` / `Function` 构造器中的 `debugger`），与 GM 注入不共享作用域、互不干扰；
+- 站点级 `FilterAntiDebug` 记忆与脚本 URL 匹配各自独立（站点键 eTLD+1，互不复用存储）。
+
 ---
 
 ## 附录 A：与 Tampermonkey 的行为差异

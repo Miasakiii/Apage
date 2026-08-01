@@ -1,6 +1,13 @@
 # Apage 开发路线图
 
-> 内部文档 | 更新：2026-07-22
+> 内部文档 | 更新：2026-08-01
+>
+> v0.9 变更（开发者向规划：F12 DevTools + 反调试过滤）：
+> - 新增 Phase 7d「开发者工具」：完备 F12 调试控制台（WebView2 原生 Chromium DevTools）+ 反调试过滤（`debugger` 中和 / DevTools 探测反制 / console 过滤）
+> - 决策记录新增 #19（DevTools 默认开启，贴合开发者）/ #20（反调试过滤默认关 + 站点级开关 + 注入序前置）/ #21（反调试过滤产品边界：调试辅助而非破解）
+> - 风险表新增 R14（反调试过滤误伤/滥用边界）、R15（WebView2 DevTools API 限制：独立窗口无停靠、已开即 no-op、无法编程聚焦）
+> - AppSettings 规划新增 `EnableDevTools`（默认 true）/ `FilterAntiDebug`（默认 false）两组开关（细节见 product-design §5.8）
+> - 前端：工具栏「开发者」菜单 + 设置面板开发者工具区 + 右键「检查」入口规划（frontend-design §11）
 >
 > v0.8 变更（UI 夸克式打磨 · 首轮 + 实机验证）：
 > - 图标体系：新增 Themes/Icons.xaml（14 个 StreamGeometry 线性图标 + 图标 Path 样式），窗口按钮/工具栏/标签条的 ASCII/Emoji 占位（←→⟳🛡⬇📜⋯ ─▢✕ ✕ +）全部换为矢量线性图标（frontend-design §10.5 落地）
@@ -157,6 +164,7 @@
 **目标**：逐步补齐高级功能（便携版 Apage.Portable）
 
 - [ ] 完整 ABP 引擎（正则 + 化妆规则 + 右键标记广告）
+- [ ] **开发者工具（F12 调试控制台 + 反调试过滤）**——详见 Phase 7d 与 [product-design.md §5.8](product-design.md#58-开发者工具f12-调试控制台--反调试过滤)，贴合开发者日常调试
 - [ ] **用户脚本管理器**（详见 [script-manager.md](script-manager.md)）——一级差异化，优先级最高
   - [ ] **最小内核（可提前至 v0.1）**：脚本导入 + URL 匹配 + 基础 GM_（getValue/setValue/addStyle）——条件成熟时前移，让首发即带可见的脚本能力
   - [ ] Phase 7a：运行时核心——ScriptBridgeService、URL 匹配引擎、注入管线、第一优先级 GM_* API
@@ -174,6 +182,28 @@
 - [ ] 多壁纸轮播
 
 **交付物**：功能完整的便携版浏览器（v1.0）
+
+---
+
+## Phase 7d：开发者工具（F12 调试控制台 + 反调试过滤）（1 周）
+
+**目标**：让 Apage 贴合开发者日常——完备的 F12 调试控制台 + 一键过滤反调试干扰（详见 [product-design.md §5.8](product-design.md#58-开发者工具f12-调试控制台--反调试过滤)）
+
+**背景（诚实口径）**：WebView2 自带完整 Chromium DevTools（与 Edge 同源，Elements/Console/Sources/Network/Performance 全量），「完备」不等于自研——外壳层要做的是把原生能力正确接出（入口/开关/每标签管理）+ 补上 WebView2 壳层没有的「反调试过滤」。F12 / Ctrl+Shift+I / 右键「Inspect」在内核启用 DevTools 时**开箱即用**（`AreDevToolsEnabled` 默认 true），外壳只需同步状态与补菜单。
+
+- [ ] F12 / Ctrl+Shift+I / 右键「检查」开箱即用验证（内核内置，`AreDevToolsEnabled=true` 即可）；工具栏「开发者」菜单补 `OpenDevToolsWindow()` 程序化入口
+- [ ] DevTools 生命周期按标签管理：每标签独立 DevTools 窗口（WebView2 无停靠面板 API，独立窗口即最终形态，R15）；标签关闭随内核销毁自动关闭；重复打开为官方 no-op（记录已开状态，避免无谓调用）
+- [ ] AppSettings 新增 `EnableDevTools`（默认 true，贴合开发者）；关闭后 `AreDevToolsEnabled=false`，F12/菜单入口同时失效，设置面板可见
+- [ ] 反调试过滤（`FilterAntiDebug`，**默认关** + 站点级记忆 + 工具栏一键开关）：
+  - [ ] `debugger` 中和（主战场=动态代码）：document-start shim 包裹 `Function` 构造器与 `eval`，剥离代码字符串中的 `debugger` 关键字；保留原生 `toString` 形貌防自检
+  - [ ] DevTools 探测反制：debugger 计时差探测随中和自然失效；独立窗口天然免疫窗口尺寸差探测
+  - [ ] console 过滤：按级别/正则过滤、重复折叠、防刷屏（DevTools Console 自带级别过滤为基线）
+  - [ ] 注入序：反调试 shim 先于用户脚本（script-manager §10 集成）；独立命名空间，不向页面暴露符号
+- [ ] 边界红线（决策 #21）：仅调试辅助，**不提供**绕过登录/DRM/付费校验/验证码等破解能力；默认关是结构性保障（R14）
+- [ ] 键盘焦点协调：F12 由内核处理，外壳侧快捷键（若补）经 KeyboardService 统一注册，与 F11 全屏、Ctrl+F 查找不冲突
+- [ ] 单测目标（Core 纯逻辑，决策 #18）：`AntiDebugShimBuilder`（`debugger` 剥离的源码变换纯函数 + toString 形貌保持）、`ConsoleFilter`（级别/正则规则）、站点级开关记忆的 URL 键归一
+
+**交付物**：F12 随时调出完整 DevTools；对反调试站点一键中和，调试不再被 `debugger;` 打断
 
 ---
 
@@ -223,6 +253,9 @@
 | 16 | 运行时分发架构 | **v0.4 修正：暂缓双线路，单押便携版** | v0.3 曾定双线路；评审发现桌面版"独有"能力中仅 MV3 扩展与运行时强绑定，双 CI/CD 对个人项目过重。改为单押便携版；Apage.Core 保留分层（解除 C# 7.3 死锁，LangVersion=latest）以备未来衍生；桌面版降级为 PMF 验证后可选项（R2、Phase 8） |
 | 17 | 主力发布版本 | 便携版唯一发布线（v0.1~v1.0） | 即插即用是 Apage 最硬卖点；.NET FX 4.8 路径 ZZZ 已验证，踩坑少；桌面版暂缓，非既定交付 |
 | 18 | 测试策略 | Core 层纯逻辑优先单测 | ScriptMatcher、AdBlockRuleEngine、ScriptMetadataParser 等纯逻辑最该也最好写单测，是共享层最划算的收益点 |
+| 19 | 开发者工具默认 | DevTools 默认开启（F12 开箱即用），反调试过滤默认关 | 目标用户含开发者，F12 是刚需；反调试过滤会改页面行为且可能被用于不正当用途，默认关 + 站点级显式开启才安全（决策 #20、R14） |
+| 20 | 反调试过滤 | document-start 注入序前置的 shim，以动态代码中和为主 | `debugger` 剥离只能在代码执行前介入：`eval`/`Function` 构造器可包装中和；静态脚本内字面 `debugger;` 无法改写（如实标注，不承诺）；默认关 + 站点级记忆 + 一键开关 |
+| 21 | 反调试过滤产品边界 | 仅调试辅助，不提供破解能力 | 与「隐私默认全开」同为产品红线：不做绕过登录/DRM/付费校验/验证码；「默认关」是边界的结构性保障 |
 
 ---
 
@@ -239,3 +272,4 @@
 | WebMessage 异步通信 | Apage（替代 ZZZ 的同步 HostObject；WebSocket 方案已否决） |
 | 壁纸系统 + 隐私统计卡片 | Apage 原创 |
 | 脚本管理器（GM_* 运行时 + 管理 UI） | Apage 原创设计（详见 script-manager.md） |
+| F12 DevTools 接入 + 反调试过滤 | WebView2 原生 DevTools（F12/Ctrl+Shift+I/OpenDevToolsWindow）+ Apage 原创注入层（复用脚本注入管线，Phase 7d） |

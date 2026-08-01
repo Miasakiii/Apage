@@ -51,6 +51,7 @@
 | 功能完整 | 用户脚本（GM_* 兼容）、部分 MV3 扩展（侧载）、多标签、下载管理 |
 | 无广告 | 浏览器本身无任何广告、推广、"可接受广告"白名单 |
 | 壁纸美学 | 新标签页自定义静态壁纸 + 隐私拦截统计卡片 |
+| 开发者友好 | 完整 F12 调试控制台（WebView2 原生 DevTools）+ 反调试过滤一键开关 |
 
 ---
 
@@ -590,6 +591,7 @@ var options = new CoreWebView2EnvironmentOptions {
 | 多窗口策略 | v0.1 单窗口多标签，多窗口后置 | Phase 7+ |
 | DPI 适配 | PerMonitorV2 清单，4K 屏文字清晰 | Phase 1 |
 | 代码签名 | 未签名 EXE 必触发 SmartScreen；开源可申请 SignPath.io 免费签名 | Phase 6 |
+| F12 开发者工具 | 完整 DevTools + 反调试过滤开关（详见 §5.8） | Phase 7d |
 
 ### 5.7 网页翻译（后期）
 
@@ -597,6 +599,37 @@ var options = new CoreWebView2EnvironmentOptions {
 - DOM 就地翻译（TreeWalker 收集文本节点）
 - 批量翻译（每批 40 条，最多 12000 字符）
 - 完美恢复原文
+
+### 5.8 开发者工具（F12 调试控制台 + 反调试过滤）
+
+> 规划随 [roadmap.md](roadmap.md) Phase 7d 落地（v0.9）。目标用户含开发者（见「一、产品定位」），F12 是刚需；反调试过滤是 WebView2 壳层能提供的差异化开发体验。
+
+#### F12 调试控制台（DevTools）
+
+- **形态**：WebView2 原生完整 Chromium DevTools（与 Edge 同源：Elements / Console / Sources / Network / Performance / Application …），**独立窗口**承载——WebView2 无「停靠面板」API，独立窗口即最终形态，不承诺停靠（R15）。
+- **入口**：内核内置 F12 / Ctrl+Shift+I / 右键「Inspect」开箱即用（`AreDevToolsEnabled` 默认 true）；外壳补工具栏「开发者」菜单（程序化 `OpenDevToolsWindow()`）与设置面板开关。
+- **生命周期**：每个标签一个 DevTools 窗口，标签关闭随内核销毁自动关闭；重复打开是官方 no-op（记录已开状态，避免无谓调用）；聚焦已有窗口需 Win32 窗口探测（脆弱，列为探索项，R15）。
+- **开关**：`AppSettings.EnableDevTools`（默认 true，贴合开发者）；关闭后 `AreDevToolsEnabled=false`，F12/菜单入口一并失效。
+- **版本兼容**：程序化打开统一用官方文档确认的无参 `OpenDevToolsWindow()`，不依赖带参重载，避免旧 SDK/Runtime 编译或运行失败。
+
+#### 反调试过滤（Anti-Anti-Debug）
+
+页面常用反调试手段干扰调试，常见三类与应对：
+
+| 手段 | 原理 | Apage 应对 |
+|------|------|-----------|
+| `debugger;` 刷屏 | 循环/定时器反复执行 `debugger;`，DevTools 打开即不断暂停 | **动态代码中和**：document-start shim 包裹 `Function` 构造器与 `eval`，剥离代码字符串中的 `debugger` 关键字；定时器回调 `toString()` 重建剥离列为探索项（有闭包破坏风险）；**静态脚本内的字面 `debugger;` 无法改写**（已解析字节），如实标注，依赖 DevTools「Deactivate breakpoints」习惯 |
+| DevTools 探测 | debugger 计时差、窗口尺寸差、`toString` 自检 | 计时探测随 `debugger` 中和自然失效；独立窗口形态天然免疫窗口尺寸差；shim 保留原生 `toString` 形貌防自检 |
+| console 刷屏 | 海量日志淹没真实输出 | 控制台过滤：按级别/正则过滤、重复折叠、防刷屏（DevTools Console 自带级别过滤为基线） |
+
+- **开关**：`AppSettings.FilterAntiDebug`（**默认关**）+ 站点级记忆 + 工具栏一键开关。默认关：注入会改页面行为、可能误伤正常站点，也避免滑向「破解工具」。
+- **注入方式**：与用户脚本共用 `AddScriptToExecuteOnDocumentCreated` 管线，注入顺序**前置**（先于用户脚本与页面脚本），独立命名空间不向页面暴露（script-manager §10 集成）。
+- **产品红线（决策 #21）**：仅做「让开发者能调试自己页面/正当页面」的辅助，**不提供**绕过登录、DRM、内容付费校验、验证码等破解能力；反调试过滤不进「默认全开」集合，与隐私统计/广告拦截定位不同。
+
+#### 与既有系统的关系
+
+- 复用 WebMessage 通道：宿主侧能力（拦截统计、网络管道数据）如需推给调试面板，走 `chrome.webview` 通道，零额外端口。
+- 快捷键：F12/Ctrl+Shift+I 由内核内置处理；外壳侧快捷键（若补）经 KeyboardService 统一注册，与 F11 全屏、Ctrl+F 查找协调，页内输入焦点不冲突。
 
 ---
 
@@ -656,6 +689,8 @@ var options = new CoreWebView2EnvironmentOptions {
 | R11 | 捆绑第三方资源的许可（EasyList 系、public_suffix_list.dat 为 MPL） | 合规风险 | 规则以运行时下载为主、内置快照附许可文本；附录注明来源与许可 | Phase 5 |
 | R12 | 体积预算超支（e_sqlite3.dll ~1.5MB + 规则快照 + public_suffix_list.dat 叠加逼近/突破 <5MB） | 核心卖点/营销数字兑现不了 | Phase 0 新增「体积预算表」spike，逐依赖称重；超支则裁剪默认规则集、或把口径基于实测调整（宁可发布前调口径，不被用户拿体积打脸） | Phase 0 |
 | R13 | 便携版单实例语义误判（全局 Mutex 导致同 U盘插不同机器/一机多副本冲突） | 便携体验受损 | SingleInstanceService 按**数据目录**（而非按机器）判定实例，Mutex 名含数据目录哈希 | Phase 3 |
+| R14 | 反调试过滤误伤正常站点 / 被当成「破解工具」 | 站点行为异常、产品口碑受损 | **默认关** + 站点级记忆 + 一键开关；仅动态代码中和，不做 JS 响应改写等重武器；明确产品红线（决策 #21）：仅调试辅助，不提供绕过登录/DRM/付费校验 | Phase 7d |
+| R15 | WebView2 DevTools API 限制（独立窗口无停靠、`OpenDevToolsWindow` 已开即 no-op、无法编程聚焦/枚举、.NET API 仅无参重载） | F12 体验不如 Chrome 停靠面板 | 诚实口径：独立窗口即最终形态，不承诺停靠；每标签记录已开状态；聚焦已有窗口列为探索项；程序化打开统一无参调用 | Phase 7d |
 
 ---
 
@@ -671,3 +706,4 @@ var options = new CoreWebView2EnvironmentOptions {
 | ABP 规则语法 | https://adblockplus.org/filter-cheatsheet |
 | Public Suffix List | https://publicsuffix.org/ （MPL 许可） |
 | SignPath.io（开源签名） | https://signpath.io/ |
+| WebView2 DevTools 调试 | https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/debug-devtools |
