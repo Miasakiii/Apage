@@ -18,21 +18,31 @@ namespace Apage.Portable
     {
         private AppServices? _services;
         private BrowserLifecycleService? _lifecycle;
+        private bool _smokeMode;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
+            // 发布线冒烟模式（--smoke）：复用真实启动路径，三信号验证后自行退出（见 SmokeCheck）
+            _smokeMode = SmokeCheck.IsRequested(e.Args);
+            if (_smokeMode)
+                SmokeCheck.HookCrashFastExit(this);
+
             // 单实例判定（R13）：Mutex 名含数据目录哈希；已有实例持有则提示并退出
             _services = new AppServices(AppPaths.DataDirectory);
             if (!_services.SingleInstance.TryAcquire(out _))
             {
-                MessageBox.Show(
-                    "Apage 已在运行（同一数据目录只允许一个实例）。",
-                    "Apage", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (!_smokeMode)
+                {
+                    // 冒烟模式无人值守，绝不弹阻塞对话框，只经退出码回传冲突
+                    MessageBox.Show(
+                        "Apage 已在运行（同一数据目录只允许一个实例）。",
+                        "Apage", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
                 _services.Dispose();
                 _services = null;
-                Shutdown();
+                Shutdown(_smokeMode ? SmokeCheck.ExitSingleInstanceConflict : 0);
                 return;
             }
 
@@ -47,6 +57,9 @@ namespace Apage.Portable
             var window = new MainWindow(_services, _lifecycle, LoadAdBlockRules());
             MainWindow = window;
             window.Show();
+
+            if (_smokeMode)
+                SmokeCheck.Start(this, window); // 看门狗接管：信号齐备/超时后 Shutdown 带退出码
         }
 
         /// <summary>

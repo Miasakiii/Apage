@@ -21,7 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 红线机械化检查（AGENTS.md 高风险约定）：csproj 通配符结构 + 零遥测/零联网上报扫描。
+      # 红线机械化检查（AGENTS.md 全部五条高风险约定）：csproj 通配符结构、零遥测/零联网上报扫描、
+      # Core 层 netstandard2.0 + 包引用边界、便携运行时目录未被跟踪、隐私默认值单测断言在位。
       # 复用现有门禁作业，不新增第二套门禁体系。
       - name: 红线检查（build/check-redlines.ps1）
         shell: pwsh
@@ -54,3 +55,10 @@ jobs:
       - name: 构建整个解决方案（build/build.ps1）
         shell: pwsh
         run: ./build/build.ps1 -Configuration Release
+
+      # 发布线冒烟验证（build/smoke.ps1）：构建成功后以 --smoke 模式拉起 Apage.Portable，
+      # 验证 应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 三个信号。
+      # windows-latest 镜像预装 WebView2 Runtime，可直接运行。
+      - name: Portable 冒烟检查（build/smoke.ps1）
+        shell: pwsh
+        run: ./build/smoke.ps1 -Configuration Release

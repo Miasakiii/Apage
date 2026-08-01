@@ -19,6 +19,9 @@ namespace Apage.Portable
         private AppServices? _services;
         private TabManager? _tabs;
 
+        /// <summary>多标签管理器（供 SmokeCheck 轮询当前标签内核就绪信号；无参构造时为 null）。</summary>
+        internal TabManager? Tabs => _tabs;
+
         public MainWindow()
         {
             InitializeComponent();

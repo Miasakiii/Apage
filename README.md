@@ -113,6 +113,13 @@ build/build.sh            # 默认 Release
 build/build.sh Debug
 ```
 
+**冒烟验证**：构建成功后可一条命令跑发布线冒烟检查（[`build/smoke.ps1`](build/smoke.ps1)）：以 `--smoke` 模式拉起 Apage.Portable，验证 **应用可启动 / 主窗口可呈现 / WebView2 内核可初始化** 三个信号并输出通过/失败；CI 在 portable 构建步骤之后自动运行：
+
+```powershell
+build\smoke.ps1                       # 默认 Release
+build\smoke.ps1 -Configuration Debug
+```
+
 脚本等价于以下手动步骤：
 
 ```powershell

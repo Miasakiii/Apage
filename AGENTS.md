@@ -51,6 +51,13 @@ dotnet build Apage.Core/Apage.Core.csproj -c Release
 dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj
 ```
 
+```powershell
+# 发布线冒烟验证（需先 build\build.ps1 构建成功）：以 --smoke 模式拉起 Apage.Portable，
+# 验证 应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 三信号，输出通过/失败；
+# CI 在 portable 构建步骤之后自动运行。实现见 Apage.Portable\SmokeCheck.cs。
+build\smoke.ps1
+```
+
 - 只测 `Apage.Core` 的纯逻辑（决策 #18：Core 层纯逻辑优先单测）。
 - 现有可测目标：`AppPaths`（缓存目录 R7 策略）、`AppSettings`（隐私默认全开基线）、`SettingsService`（原子写 / 损坏 JSON 回落默认）、`SessionService`（会话原子写 / 损坏回落空 / URL 可恢复过滤 + 索引收敛）、`ScriptMetadataParser`（TM 兼容元数据块解析 / 导入校验顺序 / 零网络字段忽略 / @run-at 回落默认）、`ScriptMatcher`（@match/@include URL 匹配 / 排除优先级 / 非法模式丢弃）、`AdBlockRuleEngine`（ABP 规则关键子串索引匹配 / @@ 例外规则 / ## 化妆规则分桶 / 不可信规则防护：超长拒收 + 100ms 正则超时）。
 - 测试文件与目标一一对应：`Apage.Core.Tests/<目标名>Tests.cs`（如 `ScriptMatcherTests.cs`）。新增 Core 纯逻辑时按此约定补单测。
@@ -60,6 +67,15 @@ dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj
 - Windows 10/11（WebView2 Runtime 系统自带；Win11 默认预装）。
 - .NET 8 SDK（构建 Core / 跑测试，版本经 `global.json` 固定）。
 - Visual Studio 2022（含 MSBuild + .NET Framework 4.8 目标包）——构建主项目必需。
+
+动手前先跑只读环境预检，确认当前机器支持哪些构建子集（不改动任何东西）：
+
+```powershell
+# 检测 .NET SDK / VS 2022 MSBuild / .NET FX 4.8 目标包，输出可用构建路线：
+#   Core+Tests（dotnet CLI）与 Portable 整解（build\build.ps1 + smoke）。
+# 退出码：0 全量可用；2 仅部分路线可用；1 无可用构建路线。
+build\preflight.ps1
+```
 
 ## 高风险区域 / 约定（改动前务必知晓）
 
@@ -82,4 +98,5 @@ dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj
 
 - [ ] `dotnet test Apage.Core.Tests` 通过。
 - [ ] `build\build.ps1` 主项目构建成功（需 VS 2022 环境）。
+- [ ] `build\smoke.ps1` 冒烟通过（应用可启动 / 主窗口可呈现 / WebView2 可初始化）。
 - [ ] 未改动通配符 csproj、未引入遥测、未改隐私默认值（除非明确要求）。
