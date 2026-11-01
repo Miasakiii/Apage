@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Apage.Core.Data;
 
 namespace Apage.Core.Services;
 
@@ -20,8 +21,29 @@ public sealed class AppServices : IDisposable
     /// <summary>会话服务（{数据目录}\session.json）：退出保存打开的标签，启动恢复。</summary>
     public SessionService Session { get; }
 
+    /// <summary>隐私拦截统计服务（{数据目录}\privacy-stats.json）：按周统计广告/追踪拦截数（§3.2）。</summary>
+    public PrivacyStatsService PrivacyStats { get; }
+
     /// <summary>单实例服务（按数据目录判定，R13）。</summary>
     public SingleInstanceService SingleInstance { get; }
+
+    /// <summary>本地滚动诊断日志（{数据目录}\logs）：默认不含 URL/搜索词/Cookie，只手动导出。</summary>
+    public LocalLogService LocalLog { get; }
+
+    /// <summary>SQLite 安全初始化入口（{数据目录}\apage.db）；首个标签创建后后台执行，不阻塞首屏。</summary>
+    public SqliteDatabase Database { get; }
+
+    /// <summary>书签仓储（SQLite）。须在 <see cref="Database"/> 初始化成功后使用。</summary>
+    public BookmarkRepository Bookmarks { get; }
+
+    /// <summary>历史记录仓储（SQLite）：仅记录成功的 http/https 顶层导航。</summary>
+    public HistoryRepository History { get; }
+
+    /// <summary>下载记录仓储（SQLite）。</summary>
+    public DownloadRepository Downloads { get; }
+
+    /// <summary>规则快照目录（{数据目录}\privacy）：手动更新后的 rules.txt + rules.json。</summary>
+    public string PrivacyDirectory { get; }
 
     /// <param name="dataDirectory">数据目录；settings.json 位于其下。</param>
     public AppServices(string dataDirectory)
@@ -30,13 +52,21 @@ public sealed class AppServices : IDisposable
             throw new ArgumentException("数据目录不能为空。", nameof(dataDirectory));
 
         DataDirectory = Path.GetFullPath(dataDirectory);
+        PrivacyDirectory = Path.Combine(DataDirectory, "privacy");
         Settings = new SettingsService(Path.Combine(DataDirectory, "settings.json"));
         Session = new SessionService(Path.Combine(DataDirectory, "session.json"));
+        PrivacyStats = new PrivacyStatsService(Path.Combine(DataDirectory, "privacy-stats.json"));
         SingleInstance = new SingleInstanceService(DataDirectory);
+        LocalLog = new LocalLogService(Path.Combine(DataDirectory, "logs"));
+        Database = new SqliteDatabase(Path.Combine(DataDirectory, "apage.db"));
+        Bookmarks = new BookmarkRepository(Database);
+        History = new HistoryRepository(Database);
+        Downloads = new DownloadRepository(Database);
     }
 
     /// <summary>
-    /// 启动初始化：只加载设置（懒加载原则，其余服务一律后置）。
+    /// 启动关键路径：只加载设置（懒加载原则，其余服务一律后置）。
+    /// 周统计与会话由首个标签初始化阶段加载，避免阻塞主窗口首次呈现。
     /// </summary>
     public async Task InitializeAsync()
     {
@@ -54,6 +84,7 @@ public sealed class AppServices : IDisposable
 
     public void Dispose()
     {
+        PrivacyStats.Dispose();
         SingleInstance.Dispose();
     }
 }

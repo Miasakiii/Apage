@@ -31,14 +31,15 @@ public sealed class SettingsService
     /// <summary>
     /// 加载设置。文件缺失返回默认值；JSON 损坏/读取失败同样回落默认值
     /// （便携场景宁可重置设置，也不能启动失败）。
+    /// 设置文件极小且位于首屏关键路径：同步读取，避免首次启动等待线程池调度。
     /// </summary>
-    public async Task<AppSettings> LoadAsync()
+    public Task<AppSettings> LoadAsync()
     {
         try
         {
             if (File.Exists(_filePath))
             {
-                var json = await Task.Run(() => File.ReadAllText(_filePath)).ConfigureAwait(false);
+                var json = File.ReadAllText(_filePath);
                 Current = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
             }
         }
@@ -46,7 +47,7 @@ public sealed class SettingsService
         {
             Current = new AppSettings();
         }
-        return Current;
+        return Task.FromResult(Current);
     }
 
     /// <summary>保存当前设置（原子写：.tmp → 替换正式文件）。目录不存在时自动创建。</summary>
