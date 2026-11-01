@@ -1,11 +1,12 @@
 # ---- Build output ----
 [Bb]in/
 [Oo]bj/
-[Dd]ebug/
-[Rr]elease/
+/[Dd]ebug/
+/[Rr]elease/
 x64/
 x86/
 artifacts/
+FodyWeavers.xsd
 
 # ---- Visual Studio / Rider ----
 .vs/
@@ -25,9 +26,10 @@ _ReSharper*/
 logs/
 
 # ---- Apage runtime data (portable layout, never commit) ----
-data/
-cache/
-wallpapers/
+# 必须锚定仓库根目录：未锚定的 data/ 会误伤 Apage.Core/Data 源码。
+/data/
+/cache/
+/wallpapers/
 
 # ---- OS junk ----
 Thumbs.db
