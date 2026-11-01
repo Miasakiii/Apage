@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
+  <!-- 原生库由 NativeBootstrap 以 Apage.Native.win-x64.* 正确嵌入、校验和加载。
+       必须从 Costura 的 CopyLocal 清单排除，否则同一 DLL 会再以 costura.*.compressed
+       形式重复打包（只增体积，运行时不会从该资源加载原生库）。 -->
+  <Costura IncludeDebugSymbols="false"
+           DisableCompression="false"
+           ExcludeAssemblies="e_sqlite3|WebView2Loader" />
+</Weavers>

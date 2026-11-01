@@ -31,7 +31,8 @@
         __pendingCount: function () { return pending.size; }
     };
 
-    // 全部断言集中在 JS 侧执行，ExecuteScriptAsync 等待 Promise 并取回 JSON 结果
+    // 全部断言集中在 JS 侧执行；经 __runSpikeTestsRecorded 包装后由 C# 侧轮询读回
+    //（ExecuteScriptAsync 对 Promise 只做 JSON 编码不 await，不能直接取 async 函数返回值）
     window.__runSpikeTests = async function () {
         const results = { assertions: [], latency: null };
         const assert = function (name, cond, detail) {
@@ -120,5 +121,24 @@
         } catch (e) { assert('A6 pending Map 无泄漏', false, String(e)); }
 
         return results;
+    };
+
+    // C# 入口：执行全部断言并把结果 JSON 写入 window.__spikeResults、置位 window.__spikeDone。
+    // 执行器自身异常也必须落定，否则 C# 轮询只能超时。
+    window.__runSpikeTestsRecorded = function () {
+        window.__spikeDone = false;
+        window.__spikeResults = null;
+        return window.__runSpikeTests()
+            .then(function (r) {
+                window.__spikeResults = JSON.stringify(r);
+                window.__spikeDone = true;
+            })
+            .catch(function (e) {
+                window.__spikeResults = JSON.stringify({
+                    assertions: [{ name: '测试执行器异常', pass: false, detail: String(e) }],
+                    latency: null
+                });
+                window.__spikeDone = true;
+            });
     };
 })();
