@@ -65,14 +65,23 @@ public class AdBlockRuleEngineTests
         Assert.False(engine.IsBlocked("https://banner7.io/static/logo.png"));
     }
 
-    [Fact]
-    public void IsBlocked_ModifierRule_MatchesUrlPart()
+    [Theory]
+    [InlineData("||metrics8.net^$script,third-party", "https://metrics8.net/probe.js")]
+    [InlineData("||metrics8.net^$domain=example.com", "https://metrics8.net/probe.js")]
+    [InlineData("||metrics8.net^$~third-party", "https://metrics8.net/probe.js")]
+    [InlineData("||metrics8.net^$important", "https://metrics8.net/probe.js")]
+    [InlineData("||metrics8.net^$", "https://metrics8.net/probe.js")]
+    [InlineData("$popup", "https://metrics8.net/probe.js")]
+    public void AddRule_UnsupportedModifiers_AreRejectedWithoutBroadening(string rule, string url)
     {
-        // $ 修饰符当前只解析不求值（与 spike 一致），URL 部分照常拦截
+        // IsBlocked 只有 URL 上下文，不能完整求值资源类型、来源域等修饰符。
+        // fail-closed：拒收整条规则，绝不剥离修饰符后扩大拦截范围。
         var engine = new AdBlockRuleEngine();
-        engine.AddRule("||metrics8.net^$script,third-party");
 
-        Assert.True(engine.IsBlocked("https://metrics8.net/probe.js"));
+        Assert.False(engine.AddRule(rule));
+        Assert.False(engine.IsBlocked(url));
+        Assert.Equal(0, engine.BlockCount);
+        Assert.Equal(1, engine.UnsupportedModifierRuleCount);
     }
 
     // —— @@ 例外规则 ——
@@ -88,6 +97,18 @@ public class AdBlockRuleEngineTests
         Assert.False(engine.IsBlocked("https://adcdn5.com/whitelist.js"));   // 例外豁免
         Assert.Equal(1, engine.BlockCount);
         Assert.Equal(1, engine.ExceptionCount);
+    }
+
+    [Fact]
+    public void AddRule_ExceptionWithUnsupportedModifiers_IsRejectedAndCannotWhitelist()
+    {
+        var engine = new AdBlockRuleEngine();
+        engine.AddRule("||adcdn5.com^");
+
+        Assert.False(engine.AddRule("@@||adcdn5.com/whitelist.js$script"));
+        Assert.True(engine.IsBlocked("https://adcdn5.com/whitelist.js"));
+        Assert.Equal(0, engine.ExceptionCount);
+        Assert.Equal(1, engine.UnsupportedModifierRuleCount);
     }
 
     // —— ## 化妆规则：不进网络索引，按域名分桶 ——

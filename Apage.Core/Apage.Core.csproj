@@ -6,8 +6,34 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <EmbeddedResource Include="Resources\Privacy\public_suffix_list.dat">
+      <LogicalName>Apage.Core.Resources.Privacy.public_suffix_list.dat</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\Privacy\builtin-rules.txt">
+      <LogicalName>Apage.Core.Resources.Privacy.builtin-rules.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\Privacy\privacy-assets.json">
+      <LogicalName>Apage.Core.Resources.Privacy.privacy-assets.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\licenses\THIRD-PARTY-NOTICES.txt">
+      <LogicalName>Apage.Core.Resources.Privacy.THIRD-PARTY-NOTICES.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\licenses\LICENSE-MIT.txt">
+      <LogicalName>Apage.Core.Resources.Privacy.LICENSE-MIT.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\licenses\LICENSE-MPL-2.0.txt">
+      <LogicalName>Apage.Core.Resources.Privacy.LICENSE-MPL-2.0.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\licenses\LICENSE-CC-BY-SA-3.0.txt">
+      <LogicalName>Apage.Core.Resources.Privacy.LICENSE-CC-BY-SA-3.0.txt</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.10" />
+    <PackageReference Include="SQLitePCLRaw.provider.e_sqlite3" Version="2.1.11" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
   </ItemGroup>
 
 </Project>
