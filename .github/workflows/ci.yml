@@ -28,6 +28,11 @@ jobs:
         shell: pwsh
         run: ./build/check-redlines.ps1
 
+      # 项目 MIT、PSL MPL-2.0、EasyList 快照 CC BY-SA 3.0，且许可全文已嵌入。
+      - name: 许可与隐私资产检查（build/check-licenses.ps1）
+        shell: pwsh
+        run: ./build/check-licenses.ps1
+
       - name: 安装 .NET SDK（按 global.json 固定）
         uses: actions/setup-dotnet@v4
         with:
@@ -56,9 +61,23 @@ jobs:
         shell: pwsh
         run: ./build/build.ps1 -Configuration Release
 
-      # 发布线冒烟验证（build/smoke.ps1）：构建成功后以 --smoke 模式拉起 Apage.Portable，
-      # 验证 应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 三个信号。
-      # windows-latest 镜像预装 WebView2 Runtime，可直接运行。
-      - name: Portable 冒烟检查（build/smoke.ps1）
+      # 正式单文件打包与验收（build/package.ps1）：许可、单文件、体积、SHA、五信号 smoke，
+      # 并在打包产物上运行启动基准。GitHub runner 不是 S0 参考硬件，因此 CI 使用
+      # 1500ms 的非参考阈值记录门禁；正式发布必须在参考机上按 1000ms 复测。
+      - name: Portable 单文件打包 + 五信号 smoke + 启动门禁
         shell: pwsh
-        run: ./build/smoke.ps1 -Configuration Release
+        run: >-
+          ./build/package.ps1 -SkipBuild -Configuration Release
+          -StartupIterations 3 -StartupLimitMs 1500 -RequireCleanWorktree
+
+      - name: 上传未签名单文件与发布证据
+        uses: actions/upload-artifact@v4
+        with:
+          name: Apage.Portable-unsigned
+          path: |
+            artifacts/portable/Apage.Portable.exe
+            artifacts/portable.sha256
+            artifacts/portable.metrics.json
+            artifacts/legal/**
+            artifacts/release-startup/metrics.json
+          retention-days: 7

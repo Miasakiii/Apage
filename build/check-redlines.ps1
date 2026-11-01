@@ -77,12 +77,23 @@ if ($appDef.Count -ne 1 -or $appDef[0].GetAttribute('Include') -ne 'App.xaml') {
 # Raw HTTP client types plus well-known telemetry/crash-reporting SDK names.
 # The browser itself talks through WebView2; app code has no business making
 # its own outbound requests (AGENTS.md: zero telemetry / zero background requests).
-$forbiddenPatterns = @(
+#
+# A3 精确豁免：手动规则更新是唯一被批准的用户触发式出站请求，
+# 只允许写在 RuleUpdateClient.cs 这一个文件里（按钮触发、HTTPS、限时限大小）。
+# 豁免是文件级而非模式级：其他任何文件出现网络类型仍然失败；
+# 遥测类模式对全部文件生效，不接受任何豁免。
+$networkPatterns = @(
     '\bHttpClient\b'
     '\bWebClient\b'
     '\bHttpWebRequest\b'
     '\bWebRequest\b'
     'System\.Net\.Http'
+)
+$networkExemptFiles = @(
+    'Apage.Portable\Services\RuleUpdateClient.cs'
+)
+
+$telemetryPatterns = @(
     '\bTelemetryClient\b'
     '\bTrackEvent\b'
     '\bTrackException\b'
@@ -99,10 +110,22 @@ $sourceFiles = foreach ($dir in $sourceDirs) {
         Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }
 }
 
-$hits = $sourceFiles | Select-String -Pattern $forbiddenPatterns
-foreach ($hit in $hits) {
+foreach ($hit in ($sourceFiles | Select-String -Pattern $telemetryPatterns)) {
     $rel = $hit.Path.Substring($root.Length + 1)
-    $failures.Add("telemetry/network : ${rel}:$($hit.LineNumber): $($hit.Line.Trim())")
+    $failures.Add("telemetry : ${rel}:$($hit.LineNumber): $($hit.Line.Trim())")
+}
+
+foreach ($hit in ($sourceFiles | Select-String -Pattern $networkPatterns)) {
+    $rel = $hit.Path.Substring($root.Length + 1)
+    if ($networkExemptFiles -contains $rel) { continue }
+    $failures.Add("network($rel) : line $($hit.LineNumber): network types are only allowed in $($networkExemptFiles -join ', '); found: $($hit.Line.Trim())")
+}
+
+# 豁免文件必须存在：避免豁免名单指向已删除/改名的文件后静默失效。
+foreach ($exempt in $networkExemptFiles) {
+    if (-not (Test-Path -LiteralPath (Join-Path $root $exempt))) {
+        $failures.Add("network-exempt : '$exempt' is listed as the only allowed network file but does not exist")
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -135,8 +158,10 @@ foreach ($winProp in 'UseWPF', 'UseWindowsForms') {
 # compatible with no Windows/.NET 8-only API surface. Adding a Core dependency
 # means reviewing it against that bar first, then extending this list.
 $allowedCorePackages = @(
-    'CommunityToolkit.Mvvm'
     'System.Text.Json'
+    'Microsoft.Data.Sqlite.Core'
+    'SQLitePCLRaw.provider.e_sqlite3'
+    'SQLitePCLRaw.lib.e_sqlite3'
 )
 foreach ($pkg in @($coreCsproj.GetElementsByTagName('PackageReference'))) {
     $pkgName = $pkg.GetAttribute('Include')
