@@ -1,0 +1,48 @@
+Apage — Third-Party Notices
+===========================
+
+Apage application code is licensed under the MIT License (see LICENSE and
+licenses/LICENSE-MIT.txt). The bundled privacy data below remains under its
+own licenses and does not change the license of Apage source code.
+
+1. Public Suffix List (PSL)
+---------------------------
+Source: https://publicsuffix.org/list/public_suffix_list.dat
+Upstream version: 2026-10-28_13-15-55_UTC
+Upstream commit: 9dfbe81931367b3f0af21035c36ae7eeb830dd88
+Bundled file: Apage.Core/Resources/Privacy/public_suffix_list.dat
+License: Mozilla Public License 2.0 (MPL-2.0)
+License text: licenses/LICENSE-MPL-2.0.txt
+License URL: https://mozilla.org/MPL/2.0/
+
+The PSL is redistributed unchanged. Its SHA-256 is recorded in
+Apage.Core/Resources/Privacy/privacy-assets.json and verified at runtime.
+
+2. EasyList and EasyPrivacy
+---------------------------
+Sources:
+  https://easylist.to/easylist/easylist.txt
+  https://easylist.to/easylist/easyprivacy.txt
+Attribution: The EasyList authors (https://easylist.to/)
+License chosen for this distribution: Creative Commons
+Attribution-ShareAlike 3.0 Unported (CC BY-SA 3.0).
+The upstream repositories are dual-licensed under GPL-3.0-or-later and
+CC BY-SA 3.0-or-later; this distribution uses CC BY-SA 3.0.
+License text: licenses/LICENSE-CC-BY-SA-3.0.txt
+License URL: https://creativecommons.org/licenses/by-sa/3.0/
+
+Modifications: the bundled snapshot is a filtered and de-duplicated subset.
+Apage retains only network rules that its current engine can evaluate without
+guesswork. Rules containing unsupported modifiers, unsupported regex syntax,
+cosmetic filters or unsupported cosmetic operators are excluded. Source URLs,
+retrieval timestamps, upstream SHA-256 values, accepted/skipped counts and
+skip reasons are recorded in privacy-assets.json.
+
+The filtered rule snapshot is distributed under CC BY-SA 3.0. It is data, not
+compiled into the application's executable logic.
+
+3. Runtime verification
+-----------------------
+The application verifies SHA-256 for both the PSL and rule snapshot before
+use. A mismatch disables the built-in asset rather than loading unverified
+data. No third-party list is downloaded automatically at runtime.
