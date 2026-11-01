@@ -1,6 +1,30 @@
 # Apage 产品设计文档
 
-> 内部文档 | 版本：v0.4 | 更新：2026-07-19
+> 内部文档 | 版本：v0.9 | 更新：2026-10-29
+>
+> v0.8 变更（D2：发布工程）：
+> - 正式产物版本元数据固定为 0.1.0.0 / 0.1.0-dev，不再输出 0.0.0.0
+> - `build\package.ps1` 串联许可校验、4.25MB/5MB 硬门禁、五信号 smoke、单文件启动基准、SHA-256、legal bundle 与 release manifest
+> - 当前产物 3,972,608 字节；首启 ContentRendered 882.6ms，热启中位 802.3ms（本机 1000ms 门槛通过）
+> - SignPath 申请与签名后复验手册已准备；产物仍未签名，签名执行属 S4
+>
+> v0.7 变更（A2：PSL + 离线规则快照）：
+> - 第三方 Cookie 判定从末两标签近似切换为随包 Public Suffix List（2026-10-28 版本，MPL-2.0）；通配/例外/IDN/尾点均有测试，失败回退末两标签
+> - 内置 EasyList/EasyPrivacy 兼容快照 94,646 条（CC BY-SA 3.0），筛选后跳过 38,432 条不可执行规则并记录原因；PSL/规则均校验 SHA-256 后加载
+> - 单文件产物增至 3,970,560 字节，仍低于 4.25MB 开发目标；smoke 扩展为应用/窗口/WebView2/SQLite/隐私资产五信号
+> - 运行时仍零规则/PSL 自动更新；A3 的「立即更新规则」尚未实现
+>
+> v0.6 变更（S2 第一批 D1/A1/B1/C1）：
+> - D1 正式单文件打包落地：1 文件 / 3,068,928 字节，真实 smoke 覆盖窗口、WebView2、SQLite 与设置窗口构造；尚未签名
+> - A1 收紧规则语义：无法完整求值的 `$` 修饰符规则整条拒收，不再宽泛拦截；追踪统计仅在 Cookie 实际存在并移除时增加，且改为短周期批量落盘
+> - B1 SQLite 安全基座落地：schema v1、事务迁移、迁移前备份、完整性检查、损坏不删库；设置/会话/统计继续 JSON
+> - C1 真实设置窗口与本地滚动诊断落地；日志默认脱敏 URL/Cookie，只手动导出
+>
+> v0.5 变更（v0.1 发布收敛基线）：
+> - S0 发布口径与共享契约已冻结；S1 独立单文件 spike 条件通过，2,950,144 字节 EXE 已验证 WPF/Core/WebView2/SQLite
+> - 生产 `Apage.Portable` 当前仍为多文件构建；Costura、原生依赖引导和正式体积门禁转入 S2-D，不能把 spike 结果写成生产已发布能力
+> - 真实应用热启动中位 900.3ms；首启存在阈值附近及更高波动，`<1s` 仅为参考环境下的窗口可见目标，最终签名单文件仍须复测
+> - v0.1 数据边界固定为新增书签/历史/下载使用 SQLite，设置/会话/周统计继续 JSON；用户脚本最小内核移至 v0.1 后
 >
 > v0.4 变更（回退双线路，单押便携版）：
 > - 双线路架构暂缓：Apage.Desktop 降级为「PMF 验证后可选项」，不再是 Phase 8 既定交付；v0.1~v1.0 单押便携版（Apage.Portable）
@@ -43,8 +67,8 @@
 
 | 特征 | 描述 |
 |------|------|
-| 极致轻量 | 单文件 EXE，<5MB，冷启动 <1秒（窗口可见） |
-| 隐私默认全开 | 广告拦截、追踪阻断、Cookie 控制，开箱即用 |
+| 极致轻量 | 发布目标：x64 单文件 EXE、签名后 <5MB、窗口可见 <1秒；B2/A3 产物 4,035,584 字节（未签名） |
+| 隐私默认全开 | DNT/GPC、PSL 精确第三方判定、第三方 Cookie 控制与 WebRTC 防护默认开启；内置 94,646 条规则快照，设置内可手动更新 |
 | 全本地化 | 零遥测、零后台请求、零数据收集（仅用户触发的网络请求，清单透明） |
 | 无需登录 | 不强制账号，不要求云同步 |
 | Portable | 数据跟程序走，U盘即插即用（前提：目标机已装 WebView2 Runtime，Win11 默认预装，见风险 R1） |
@@ -194,7 +218,7 @@
 
 **要求**：
 - 必须支持**用户脚本（Tampermonkey 兼容 GM_\* API）**——这是 Apage 的一级差异化能力
-- Chrome 扩展量力而行：WebView2 的扩展支持目前仅限 **MV3 子集 + 本地侧载**，API 覆盖不全，无商店直连。宣传口径为「支持部分 MV3 扩展」，不做全量承诺（实测验证见路线图 Phase 0）
+- Chrome 扩展量力而行：WebView2 的扩展支持为 **本地侧载**（须在 Environment 创建时显式开启 `AreBrowserExtensionsEnabled`，默认关闭；2026-10-26 实测最小 MV3/MV2 均可装），API 覆盖不全，无商店直连。宣传口径为「支持本地侧载扩展」，不做全量承诺（实测见 [spikes/results/extension.md](spikes/results/extension.md) 与路线图 Phase 0）
 
 ### 痛点 6：没有差异化记忆点
 
@@ -220,11 +244,11 @@
 | 运行时分发 | 框架依赖（系统自带） | 保 <5MB 单文件；真正的运行时依赖是 WebView2 Runtime（见 R1），非 .NET |
 | 共享层 | Apage.Core（.NET Standard 2.0） | Services/ViewModels/Models 分层，纯逻辑可单测；为未来桌面版衍生预留 |
 | UI | WPF（.NET Framework 4.8） | 比 WinUI 3 更成熟，XAML 灵活 |
-| MVVM | CommunityToolkit.Mvvm | 轻量、源生成器、ZZZ 验证 |
+| UI 组织 | 当前 WPF code-behind；MVVM 分层为预留（当前未引入 MVVM 包） | 避免首发前大范围重写，纯逻辑继续沉淀 Core |
 | 引擎 | WebView2 | 系统自带 Chromium（常青版），零体积 |
 | 通信 | WebMessage（chrome.webview.postMessage） | WebView2 原生异步通道，无端口、无鉴权问题 |
-| 存储 | SQLite（Microsoft.Data.Sqlite） | 单文件、查询高效、portable 友好 |
-| 打包 | PublishSingleFile（框架依赖） | 原生单 EXE |
+| 存储 | 设置/会话/周统计 JSON；SQLite schema v1 与安全基础已就绪，书签/历史/下载待 B2 | 小状态原子写足够；结构化数据走事务与查询 |
+| 打包 | 生产单文件：Costura + NativeBootstrap，`build\package.ps1` 当前产出 3,972,608 字节 / 版本 0.1.0.0 | .NET FX 4.8 不支持 PublishSingleFile；已准备 SignPath 签名后复验，实际签名属 S4 |
 | JSON | System.Text.Json | 高性能 |
 
 > **共享层语言版本**：Apage.Core 目标框架为 .NET Standard 2.0（保证未来桌面版 .NET 8 与便携版 .NET FX 4.8 都能引用）。**LangVersion 放开为 `latest`**——.NET Standard 2.0 目标框架仍可使用 C# 8+ 的多数语法糖（`switch` 表达式、`using` 声明、模式匹配等，编译器负责降级）；`record`/`init` 仅需补一个 `IsExternalInit` polyfill；只需避免依赖运行时的新 API。此前 v0.3 锁定 `7.3` 导致 §4.4、script-manager §3.2 示例的 `switch` 表达式自相矛盾，v0.4 已修正。
@@ -398,8 +422,8 @@ WebMessage 通道只存在于我们自己的 WebView2 进程内：无 TCP 端口
 
 | 指标 | 便携版目标（主力） | 参考值 | 备注 |
 |------|------------------|--------|------|
-| 安装包体积 | <5MB（Phase 0 实测预算，见 R12） | ZZZ ~5MB | 框架依赖单文件；e_sqlite3.dll + 规则快照 + PSL 叠加需实测称重，超支则调口径 |
-| 冷启动时间 | <1秒（窗口可见） | Min 0.8秒 | UI 先行 + WebView2 后台预热 |
+| 安装包体积 | 签名后 <5MB（见 R12） | ZZZ ~5MB | D2 未签名产物 3,972,608 字节；4.25MB 目标余量 277,392（6.5%） |
+| 冷启动时间 | <1秒（窗口可见） | Min 0.8秒 | D2 本机首启 882.6ms、热启中位 802.3ms；CI 用 1500ms 非参考门禁，发布须复测 |
 | 空白标签内存 | <50MB | Min 45MB | 共享 Environment |
 | 10 标签内存 | <300MB | Min ~250MB | **隐私标签共享一个隔离 Environment**，否则每标签一套浏览器进程（3+ 进程），目标无法达成 |
 | 广告规则容量 | 50万条 | ZZZ 已验证 | Phase 0 benchmark 复核 |
@@ -468,6 +492,8 @@ public class PrivacyDefaults
 
 原则：不设"可接受广告"白名单。用户自定义规则优先级最高。
 
+> **实现现状（A2，2026-10-29）**：v0.1 随包快照当前只含 **EasyList + EasyPrivacy** 中引擎可正确执行的网络规则（94,646 条），EasyList China 等列表可在后续版本追加。快照记录来源 URL、抓取时间、上游 SHA-256、接受/跳过原因与许可；过滤快照按 CC BY-SA 3.0 分发，PSL 按 MPL-2.0。运行时加载前校验 SHA-256，不自动联网更新；「立即更新规则」属 A3。
+
 **更新机制**（与"零后台请求"原则对齐）：
 
 1. 安装包内置一份规则快照，保证开箱即用；
@@ -480,6 +506,13 @@ public class PrivacyDefaults
 - 请求时按 Public Suffix List 判断域名归属，剥离第三方请求的 `Cookie` 头；
 - 响应侧同步剥离 `Set-Cookie`（需重写响应，有成本，按开关启用）；
 - **已知残余泄露面**（文档公开，不粉饰）：第三方脚本的 `document.cookie`、IndexedDB/localStorage 等存储类追踪不在头部手术覆盖范围内，依赖 Chromium 存储分区与 Profile 首选项缓解。优先使用 Chromium 内建能力，头部手术作为补充。
+
+> **实现现状（A2，2026-10-29；设计见 [design/2026-10-29-a2-psl-rule-snapshot.md](design/2026-10-29-a2-psl-rule-snapshot.md)）**
+> - 请求侧剥离已落地（`BlockThirdPartyCookies` 默认开）：第三方判定使用随包 Public Suffix List 求 registrable domain（eTLD+1），支持普通/通配/例外、IDN、大小写与尾点；PSL 不可用时回退末两标签近似（安全方向为漏判）。`foo.co.uk` 与 `bar.co.uk` 现已正确判为第三方。
+> - PSL/规则快照加载失败只记录本地日志，不阻断浏览；每请求不读文件，查询为纯内存。
+> - 仅子资源请求剥离：顶层导航对目标站即第一方，剥了会直接破坏登录态。
+> - 仍待：响应侧 `Set-Cookie` 剥离、按站点开关。
+> - **隐私统计卡片口径**（新标签页「本周已拦截 N 条追踪 · M 个广告」）：广告数 = 规则拦截次数，追踪数 = 第三方 Cookie 剥离次数；按周统计（周一 00:00 本地时间边界），正常退出时原子写 `{数据目录}\privacy-stats.json`，崩溃丢失当次计数。
 
 #### 追踪保护头
 
@@ -678,16 +711,16 @@ var options = new CoreWebView2EnvironmentOptions {
 |---|------|------|------|---------|
 | R1 | **WebView2 Runtime 缺失**（LTSC/企业精简版/老 Win10）——头号现实风险 | 无法启动 | **诚实标注前提**：README/关于页明确"即插即用依赖目标机已装 WebView2 Runtime（Win11 默认预装，Win10 需 Edge 保持更新）"；启动时检测缺失并给出手动下载指引，**不做静默联网下载**（违背零网络）；不打包 Fixed Version（~180MB 摧毁 <5MB） | Phase 1 |
 | R2 | 双线路维护成本 vs 个人项目产能 | 双 CI/CD、双测试拖垮迭代 | **v0.4 决策：暂缓双线路，单押便携版**。便携版借 .NET FX 4.8 系统自带实现真即插即用（.NET 运行时非瓶颈，见 R1）。Apage.Core 保留分层但解除 C# 7.3 死锁（LangVersion=latest）。桌面版降级为 PMF 验证后可选项（Phase 8），非既定交付 | v0.1 发布后复盘 |
-| R3 | WebView2 扩展 API 覆盖不足 | "支持 Chrome 扩展"承诺落空 | 宣传口径降为「部分 MV3 扩展（侧载）」；用户脚本作为一级能力 | Phase 0 Spike 3 |
+| R3 | WebView2 扩展 API 覆盖不足 | "支持 Chrome 扩展"承诺落空 | 宣传口径为「本地侧载扩展」（须显式开启 `AreBrowserExtensionsEnabled`；MV3/MV2 均实测可装，2026-10-26 Spike 3，见 [spikes/results/extension.md](spikes/results/extension.md)）；用户脚本作为一级能力 | Phase 0 Spike 3（已实测） |
 | R4 | 50 万条规则下拦截性能不达标 | 核心卖点受损 | 子串索引 + MatchTimeout；benchmark 不达标则裁剪默认规则集 | Phase 0 Spike 1 |
-| R5 | 冷启动 <1s 达不到 | 核心卖点受损 | UI 先行 + WebView2 后台预热 + ReadyToRun；验收口径为「窗口可见 <1s」 | Phase 0 Spike 2 |
+| R5 | 冷启动 <1s 达不到 | 核心卖点受损 | UI 先行 + WebView2 后台预热；验收口径为「窗口可见 <1s」。真实应用热启动中位 900.3ms，首启存在波动，不作全环境承诺 | Phase 0 Spike 2（已实测；S4 复测） |
 | R6 | U盘热拔出 / exFAT 上 SQLite 损坏 | 用户数据丢失 | `journal_mode=DELETE` + `synchronous=FULL` + 启动 `PRAGMA integrity_check` + 自动备份上一版本 | Phase 3 |
 | R7 | WebView2 缓存海量小文件写入伤 U盘、拖慢速度 | 便携体验差 | 缓存位置可配置：默认宿主机 `%TEMP%`（数据仍便携），纯便携模式可选；只读 U盘 场景降级运行 | Phase 1 |
 | R8 | 规则列表供应链攻击（ReDoS/恶意规则） | 浏览器卡死 | 见 5.3 供应链安全 | Phase 5 |
 | R9 | 未签名 EXE 触发 SmartScreen 拦截 | 新用户被劝退 | 开源项目申请 SignPath.io 免费签名 | Phase 6 |
 | R10 | 零遥测 = 对线上问题失明 | 无法定位崩溃 | 本地崩溃日志 + 用户手动导出 | Phase 6 |
-| R11 | 捆绑第三方资源的许可（EasyList 系、public_suffix_list.dat 为 MPL） | 合规风险 | 规则以运行时下载为主、内置快照附许可文本；附录注明来源与许可 | Phase 5 |
-| R12 | 体积预算超支（e_sqlite3.dll ~1.5MB + 规则快照 + public_suffix_list.dat 叠加逼近/突破 <5MB） | 核心卖点/营销数字兑现不了 | Phase 0 新增「体积预算表」spike，逐依赖称重；超支则裁剪默认规则集、或把口径基于实测调整（宁可发布前调口径，不被用户拿体积打脸） | Phase 0 |
+| R11 | 捆绑第三方资源的许可（EasyList 系、public_suffix_list.dat 为 MPL） | 合规风险 | **A2 已闭环**：PSL MPL-2.0；EasyList/EasyPrivacy 过滤快照选择 CC BY-SA 3.0；许可全文、归属和来源哈希随包，`licenses/THIRD-PARTY-NOTICES.txt` 可审计 | A2（完成） |
+| R12 | 体积预算超支（e_sqlite3.dll ~1.5MB + 规则快照 + public_suffix_list.dat 叠加逼近/突破 <5MB） | 核心卖点/营销数字兑现不了 | **B2/A3 实测 4,035,584 字节**：4.25MB 目标余 214,416（5.0%）、5MB 硬门禁余 964,416（19.3%）；`package.ps1` 已硬性拦截超限 | B2/A3（完成）；S4 复测 |
 | R13 | 便携版单实例语义误判（全局 Mutex 导致同 U盘插不同机器/一机多副本冲突） | 便携体验受损 | SingleInstanceService 按**数据目录**（而非按机器）判定实例，Mutex 名含数据目录哈希 | Phase 3 |
 | R14 | 反调试过滤误伤正常站点 / 被当成「破解工具」 | 站点行为异常、产品口碑受损 | **默认关** + 站点级记忆 + 一键开关；仅动态代码中和，不做 JS 响应改写等重武器；明确产品红线（决策 #21）：仅调试辅助，不提供绕过登录/DRM/付费校验 | Phase 7d |
 | R15 | WebView2 DevTools API 限制（独立窗口无停靠、`OpenDevToolsWindow` 已开即 no-op、无法编程聚焦/枚举、.NET API 仅无参重载） | F12 体验不如 Chrome 停靠面板 | 诚实口径：独立窗口即最终形态，不承诺停靠；每标签记录已开状态；聚焦已有窗口列为探索项；程序化打开统一无参调用 | Phase 7d |
@@ -704,6 +737,7 @@ var options = new CoreWebView2EnvironmentOptions {
 | WebView2 文档 | https://learn.microsoft.com/en-us/microsoft-edge/webview2/ |
 | WebView2 扩展支持 | https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/extensions |
 | ABP 规则语法 | https://adblockplus.org/filter-cheatsheet |
-| Public Suffix List | https://publicsuffix.org/ （MPL 许可） |
+| Public Suffix List | https://publicsuffix.org/ （MPL-2.0） |
+| EasyList / EasyPrivacy | https://easylist.to/ （过滤快照按 CC BY-SA 3.0 分发，上游另可选 GPL-3.0+） |
 | SignPath.io（开源签名） | https://signpath.io/ |
 | WebView2 DevTools 调试 | https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/debug-devtools |

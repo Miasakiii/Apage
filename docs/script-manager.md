@@ -726,7 +726,7 @@ AvalonEdit 是 .NET 生态中最适合的轻量代码编辑器，不增加显著
 
 #### Phase 7a：运行时核心（1.5 周）
 
-> **最小内核（可提前至 v0.1）**：脚本导入 + ScriptMatcher URL 匹配 + 基础 GM_（getValue/setValue/addStyle）。条件成熟时前移，让首发即带可见的脚本能力（见 roadmap Phase 7）。
+> **最小内核（v0.1 后启动）**：先补 Spike 5，再做脚本导入 + ScriptMatcher URL 匹配 + 基础 GM_（getValue/setValue/addStyle）。为确保 v0.1 发布闭环，不再前移到首发（见 roadmap Phase 7 与 v0.1 发布收敛计划 S5）。
 
 - [ ] ScriptBridgeService 实现（WebMessage 桥接层）
 - [ ] ScriptMatcher URL 匹配引擎（@match + @include + @exclude）
