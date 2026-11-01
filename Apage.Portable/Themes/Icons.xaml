@@ -24,6 +24,10 @@
     <StreamGeometry x:Key="Apage.Geo.Download">M12,4 L12,15 M7,10 L12,15 L17,10 M5,20 L19,20</StreamGeometry>
     <!-- 脚本 </> -->
     <StreamGeometry x:Key="Apage.Geo.Script">M9,8 L5,12 L9,16 M15,8 L19,12 L15,16</StreamGeometry>
+    <!-- 书签（五角星） -->
+    <StreamGeometry x:Key="Apage.Geo.Star">M12,3.6 L14.6,9 L20.5,9.8 L16.2,13.9 L17.3,19.8 L12,16.9 L6.7,19.8 L7.8,13.9 L3.5,9.8 L9.4,9 Z</StreamGeometry>
+    <!-- 历史（时钟） -->
+    <StreamGeometry x:Key="Apage.Geo.History">M12,3 A9,9 0 1 0 12,21 A9,9 0 1 0 12,3 M12,7 L12,12 L15.5,14</StreamGeometry>
     <!-- 菜单（三横线） -->
     <StreamGeometry x:Key="Apage.Geo.Menu">M4,7 L20,7 M4,12 L20,12 M4,17 L20,17</StreamGeometry>
     <!-- 加号 -->

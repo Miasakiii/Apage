@@ -1,0 +1,187 @@
+<Window x:Class="Apage.Portable.Views.LibraryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="书签、历史与下载 — Apage"
+        Width="760" Height="600"
+        MinWidth="640" MinHeight="480"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Apage.Brush.WindowBg}">
+    <Window.Resources>
+        <!-- 顶部页签：轻量胶囊，选中用 AccentSoft 底（与应用其它面板一致） -->
+        <Style x:Key="LibraryTabItem" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource Apage.Brush.TextPrimary}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" CornerRadius="8" Padding="14,7" Margin="0,0,6,0"
+                                Background="Transparent">
+                            <ContentPresenter ContentSource="Header"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource Apage.Brush.AccentSoft}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource Apage.Brush.Hover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="BookmarkRowTemplate">
+            <StackPanel Margin="2,6">
+                <TextBlock Text="{Binding Title}" FontSize="13"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+                <TextBlock Text="{Binding Url}" FontSize="11" Margin="0,2,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="HistoryRowTemplate">
+            <Grid Margin="2,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding Title}" FontSize="13"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+                    <TextBlock Text="{Binding Url}" FontSize="11" Margin="0,2,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding When}" FontSize="11"
+                           Margin="12,0,4,0" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="DownloadRowTemplate">
+            <StackPanel Margin="2,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding FileName}" FontSize="13"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+                    <TextBlock Grid.Column="1" Text="{Binding StateText}" FontSize="11"
+                               Margin="12,0,4,0"
+                               Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+                </Grid>
+                <TextBlock Text="{Binding ProgressText}" FontSize="11" Margin="0,2,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <Style x:Key="LibraryListStyle" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="书签、历史与下载"
+                       FontSize="{DynamicResource Apage.FontSize.Lg}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+            <TextBlock Text="全部数据保存在本机 apage.db，不会上传；隐私标签的访问不记入历史。"
+                       Margin="0,4,0,0"
+                       FontSize="{DynamicResource Apage.FontSize.Sm}"
+                       Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+        </StackPanel>
+
+        <TabControl x:Name="Tabs" Grid.Row="1"
+                    Background="Transparent" BorderThickness="0"
+                    ItemContainerStyle="{StaticResource LibraryTabItem}"
+                    SelectionChanged="Tabs_SelectionChanged">
+            <!-- 书签 -->
+            <TabItem Header="书签">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="打开" Width="72" Click="OpenBookmark_Click"/>
+                        <Button Content="删除" Width="72" Margin="8,0,0,0" Click="RemoveBookmark_Click"/>
+                        <Button Content="导入浏览器书签…" Margin="8,0,0,0" Click="ImportBookmarks_Click"/>
+                    </StackPanel>
+                    <ListBox x:Name="BookmarkList" Grid.Row="1"
+                             Style="{StaticResource LibraryListStyle}"
+                             ItemTemplate="{StaticResource BookmarkRowTemplate}"
+                             MouseDoubleClick="BookmarkList_MouseDoubleClick"/>
+                </Grid>
+            </TabItem>
+
+            <!-- 历史 -->
+            <TabItem Header="历史">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="HistorySearchBox" Grid.Column="0" Height="30"
+                                 VerticalContentAlignment="Center" Padding="8,0"
+                                 TextChanged="HistorySearchBox_TextChanged"
+                                 ToolTip="按标题或网址搜索"/>
+                        <Button Grid.Column="1" Content="清空历史" Width="88" Margin="8,0,0,0"
+                                Click="ClearHistory_Click"/>
+                    </Grid>
+                    <ListBox x:Name="HistoryList" Grid.Row="1"
+                             Style="{StaticResource LibraryListStyle}"
+                             ItemTemplate="{StaticResource HistoryRowTemplate}"
+                             MouseDoubleClick="HistoryList_MouseDoubleClick"/>
+                </Grid>
+            </TabItem>
+
+            <!-- 下载 -->
+            <TabItem Header="下载">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="打开文件" Width="88" Click="OpenDownload_Click"/>
+                        <Button Content="取消下载" Width="88" Margin="8,0,0,0" Click="CancelDownload_Click"/>
+                        <Button Content="清理已完成" Width="96" Margin="8,0,0,0" Click="ClearDownloads_Click"/>
+                    </StackPanel>
+                    <ListBox x:Name="DownloadList" Grid.Row="1"
+                             Style="{StaticResource LibraryListStyle}"
+                             ItemTemplate="{StaticResource DownloadRowTemplate}"
+                             MouseDoubleClick="DownloadList_MouseDoubleClick"/>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <TextBlock x:Name="StatusText" Grid.Row="2" Margin="0,12,0,0"
+                   FontSize="{DynamicResource Apage.FontSize.Sm}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+    </Grid>
+</Window>

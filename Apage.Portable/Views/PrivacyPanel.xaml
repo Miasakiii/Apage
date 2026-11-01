@@ -1,0 +1,39 @@
+<UserControl x:Class="Apage.Portable.Views.PrivacyPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 隐私盾面板内容（frontend-design §5.4）：只在首次点击时实例化，避免常驻主窗口 XAML -->
+    <Border Width="268" Padding="16" CornerRadius="12"
+            Background="{DynamicResource Apage.Brush.Surface}"
+            BorderBrush="{DynamicResource Apage.Brush.Border}"
+            BorderThickness="1">
+        <StackPanel>
+            <TextBlock Text="隐私盾"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+            <TextBlock Text="本周拦截（本机统计）" Margin="0,10,0,0"
+                       FontSize="{DynamicResource Apage.FontSize.Xs}"
+                       Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <TextBlock x:Name="AdsText" FontSize="18" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Apage.Brush.Shield}"/>
+                <TextBlock Text=" 广告" VerticalAlignment="Bottom" Margin="2,0,0,3"
+                           FontSize="{DynamicResource Apage.FontSize.Sm}"
+                           Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+                <TextBlock x:Name="TrackersText" Margin="16,0,0,0" FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Apage.Brush.Shield}"/>
+                <TextBlock Text=" 追踪" VerticalAlignment="Bottom" Margin="2,0,0,3"
+                           FontSize="{DynamicResource Apage.FontSize.Sm}"
+                           Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+            </StackPanel>
+            <TextBlock x:Name="RulesText" Margin="0,10,0,0" TextWrapping="Wrap"
+                       FontSize="{DynamicResource Apage.FontSize.Xs}"
+                       Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+            <TextBlock x:Name="SwitchesText" Margin="0,6,0,0" TextWrapping="Wrap"
+                       FontSize="{DynamicResource Apage.FontSize.Xs}"
+                       Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+            <Button Content="打开设置" HorizontalAlignment="Left" Margin="0,12,0,0"
+                    Click="Settings_Click"/>
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -65,22 +65,35 @@
                 <!-- 中间：Omnibox 地址栏（回车导航；页面 URL/标题变化回填，接线见 MainWindow.xaml.cs） -->
                 <controls:Omnibox Grid.Column="1" x:Name="Omnibox" Margin="8,0" VerticalAlignment="Center"/>
 
-                <!-- 右侧：隐私盾 / 下载 / 脚本 / 菜单 四钮（矢量线性图标） -->
+                <!-- 右侧：隐私盾 / 书签 / 下载 / 脚本 / 菜单 五钮（矢量线性图标） -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="ShieldButton" Width="32" Height="32"
-                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="隐私盾">
+                            Style="{DynamicResource Apage.Style.Button.Icon}"
+                            ToolTip="隐私盾"
+                            Click="ShieldButton_Click">
                         <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Shield}"/>
                     </Button>
+                    <Button x:Name="BookmarksButton" Width="32" Height="32" Margin="4,0,0,0"
+                            Style="{DynamicResource Apage.Style.Button.Icon}"
+                            ToolTip="书签（Ctrl+D 收藏当前页）"
+                            Click="BookmarksButton_Click">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Star}"/>
+                    </Button>
                     <Button x:Name="DownloadsButton" Width="32" Height="32" Margin="4,0,0,0"
-                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="下载">
+                            Style="{DynamicResource Apage.Style.Button.Icon}"
+                            ToolTip="下载（Ctrl+J）"
+                            Click="DownloadsButton_Click">
                         <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Download}"/>
                     </Button>
                     <Button x:Name="ScriptsButton" Width="32" Height="32" Margin="4,0,0,0"
-                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="脚本">
+                            Style="{DynamicResource Apage.Style.Button.Icon}"
+                            ToolTip="用户脚本（v0.1 之后提供）"
+                            Click="ScriptsButton_Click">
                         <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Script}"/>
                     </Button>
                     <Button x:Name="MenuButton" Width="32" Height="32" Margin="4,0,0,0"
-                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="菜单">
+                            Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="设置"
+                            Click="MenuButton_Click">
                         <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Menu}"/>
                     </Button>
                 </StackPanel>
@@ -89,5 +102,108 @@
 
         <!-- 第 3 行：网页内容区（多标签宿主：TabManager 为每个标签在此放一个 BrowserTabView，仅当前可见） -->
         <Grid Grid.Row="2" x:Name="TabHost"/>
+
+        <!-- 页内查找条（S3）：Ctrl+F 打开，浮在内容区右上角；状态文案由 Apage.Core.FindBarState 决定。
+             用 Popup 而非 Grid 覆盖层：WebView2 是 HwndHost 子窗口（airspace），
+             WPF 覆盖元素会被网页盖住，只有 Popup（独立窗口）才能浮在网页之上。
+             输入即查找、Enter 下一个、Shift+Enter 上一个、Esc 关闭（接线见 MainWindow.xaml.cs）。 -->
+        <Popup x:Name="FindPopup" Grid.Row="2"
+               Placement="Relative" PlacementTarget="{Binding ElementName=TabHost}"
+               HorizontalOffset="0" VerticalOffset="12"
+               StaysOpen="True" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border x:Name="FindBar" Padding="8,5" CornerRadius="8"
+                    Background="{DynamicResource Apage.Brush.Surface}"
+                    BorderBrush="{DynamicResource Apage.Brush.Border}" BorderThickness="1"
+                    PreviewKeyDown="FindBar_PreviewKeyDown">
+                <StackPanel Orientation="Horizontal">
+                    <Path Width="13" Height="13" Margin="2,0,7,0" VerticalAlignment="Center"
+                          Style="{StaticResource Apage.Style.Icon}"
+                          Data="{StaticResource Apage.Geo.Search}"/>
+
+                    <TextBox x:Name="FindBox" Width="176" Height="26"
+                             Background="Transparent" BorderThickness="0"
+                             FocusVisualStyle="{x:Null}"
+                             FontSize="12" Padding="2,0" VerticalContentAlignment="Center"
+                             Foreground="{DynamicResource Apage.Brush.TextPrimary}"
+                             CaretBrush="{DynamicResource Apage.Brush.Accent}"
+                             SelectionBrush="{DynamicResource Apage.Brush.Accent}" SelectionOpacity="0.28"
+                             TextChanged="FindBox_TextChanged"
+                             PreviewKeyDown="FindBox_PreviewKeyDown">
+                        <TextBox.Template>
+                            <ControlTemplate TargetType="TextBox">
+                                <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                              HorizontalScrollBarVisibility="Hidden"
+                                              VerticalScrollBarVisibility="Hidden"
+                                              VerticalAlignment="Center"/>
+                            </ControlTemplate>
+                        </TextBox.Template>
+                    </TextBox>
+
+                    <!-- 命中状态：空 / 「无结果」/「3 / 7」 -->
+                    <TextBlock x:Name="FindStatus" MinWidth="46" Margin="6,0,6,0"
+                               VerticalAlignment="Center" TextAlignment="Right"
+                               FontSize="11"
+                               Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+
+                    <Button x:Name="FindPrevButton" Width="26" Height="26" VerticalAlignment="Center"
+                            Style="{DynamicResource Apage.Style.Button.Icon}"
+                            ToolTip="上一个（Shift+Enter）"
+                            Click="FindPrevButton_Click">
+                        <Path Style="{StaticResource Apage.Style.Icon}"
+                              Data="{StaticResource Apage.Geo.Back}">
+                            <Path.RenderTransform>
+                                <RotateTransform Angle="90" CenterX="7" CenterY="7"/>
+                            </Path.RenderTransform>
+                        </Path>
+                    </Button>
+                    <Button x:Name="FindNextButton" Width="26" Height="26" Margin="2,0,0,0"
+                            VerticalAlignment="Center"
+                            Style="{DynamicResource Apage.Style.Button.Icon}"
+                            ToolTip="下一个（Enter）"
+                            Click="FindNextButton_Click">
+                        <Path Style="{StaticResource Apage.Style.Icon}"
+                              Data="{StaticResource Apage.Geo.Forward}">
+                            <Path.RenderTransform>
+                                <RotateTransform Angle="90" CenterX="7" CenterY="7"/>
+                            </Path.RenderTransform>
+                        </Path>
+                    </Button>
+                    <Button x:Name="FindCloseButton" Width="26" Height="26" Margin="2,0,0,0"
+                            VerticalAlignment="Center"
+                            Style="{DynamicResource Apage.Style.Button.Icon}"
+                            ToolTip="关闭（Esc）"
+                            Click="FindCloseButton_Click">
+                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Close}"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+
+        <!-- 隐私盾面板：内容在首次点击时创建（Views/PrivacyPanel.xaml），不参与启动解析 -->
+        <Popup x:Name="ShieldPopup" Grid.Row="1"
+               PlacementTarget="{Binding ElementName=ShieldButton}"
+               Placement="Bottom" VerticalOffset="6" HorizontalOffset="-96"
+               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade"/>
+
+        <!-- 轻量提示条：书签收藏等操作反馈。
+             与查找条同理，必须用 Popup：WebView2 是 HwndHost 子窗口，放在 Grid.Row=2 里的
+             Border 会被网页整块盖住（airspace），真机上「已添加到书签」这类反馈完全看不见。
+             不抢焦点、不拦截点击：Popup 窗口额外置 WS_EX_TRANSPARENT（见 MainWindow.xaml.cs）。
+             定位在内容区底部居中，随窗口尺寸重算。 -->
+        <Popup x:Name="ToastPopup" Grid.Row="2"
+               Placement="Relative" PlacementTarget="{Binding ElementName=TabHost}"
+               HorizontalOffset="0" VerticalOffset="0"
+               StaysOpen="True" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border x:Name="Toast" Padding="16,8"
+                    CornerRadius="16" Opacity="1"
+                    IsHitTestVisible="False"
+                    Background="{DynamicResource Apage.Brush.Surface}"
+                    BorderBrush="{DynamicResource Apage.Brush.Border}"
+                    BorderThickness="1">
+                <TextBlock x:Name="ToastText" FontSize="12"
+                           Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+            </Border>
+        </Popup>
     </Grid>
 </Window>

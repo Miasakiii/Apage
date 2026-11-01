@@ -2,12 +2,16 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Apage.Core.Configuration;
+using Apage.Core.Models;
 using Apage.Core.Services;
 using Microsoft.Web.WebView2.Core;
 
@@ -25,6 +29,8 @@ public partial class BrowserTabView : UserControl
 
     private bool _initStarted;
     private bool _coreReady;
+    private bool _findAvailable;
+    private bool _findActive;
     private string? _pendingUrl;
 
     public BrowserTabView()
@@ -52,17 +58,23 @@ public partial class BrowserTabView : UserControl
     public CoreWebView2Environment? SharedEnvironment { get; set; }
 
     /// <summary>
-    /// 宿主可注入内核生命周期门面：普通标签经此共享同一 Environment（Phase 2 多标签复用同一内核）。
-    /// 与 <see cref="SharedEnvironment"/> 二选一；均未设置时按 AppPaths（R7）自建。须在 Loaded 前赋值。
+    /// 宿主注入的标签依赖包（设置 / 隐私统计 / 广告拦截 / 内核生命周期，
+    /// docs/design/2026-10-23-privacy-stats-ntp.md §3.4）。须在 Loaded 前赋值；
+    /// 与 <see cref="SharedEnvironment"/> 二选一（Context.Lifecycle 未设置时按 AppPaths（R7）自建）。
     /// </summary>
-    public BrowserLifecycleService? Lifecycle { get; set; }
+    public BrowserTabContext? Context { get; set; }
 
     /// <summary>
-    /// 宿主可注入广告拦截引擎（§5.3，多标签共享同一实例，纯内存匹配无 IO）。须在 Loaded 前赋值。
-    /// 为 null 或无规则时完全不挂 WebResourceRequested——该管道会让页面加载暂停等待 UI 线程处理
-    /// （官方文档明确的性能开销），按需注册。
+    /// 该标签是否为隐私标签。为 true 时**不写历史记录**（与会话捕获的排除规则一致）。
+    /// 由 TabManager 在物化时按 BrowserTab.IsPrivate 赋值。
     /// </summary>
-    public AdBlockRuleEngine? AdBlock { get; set; }
+    public bool IsPrivate { get; set; }
+
+    /// <summary>
+    /// 下载协调器（B2）；未装配时下载仍由 WebView2 正常完成，只是不落库。
+    /// 由 TabManager 在物化时注入共享实例。
+    /// </summary>
+    public Services.DownloadCoordinator? Downloads { get; set; }
 
     /// <summary>底层 CoreWebView2（未就绪时为 null）。供广告拦截/隐私等事件管道（§5.4）挂接。</summary>
     public CoreWebView2? Core => WebView.CoreWebView2;
@@ -72,8 +84,9 @@ public partial class BrowserTabView : UserControl
     public bool CanGoForward => WebView.CoreWebView2?.CanGoForward == true;
 
     /// <summary>创建 BrowserLifecycleService 的工厂适配（Core 层不引用 WebView2 SDK，经此委托门面创建 Environment）。</summary>
-    public static BrowserLifecycleService CreateLifecycleService() =>
-        new BrowserLifecycleService(CreateEnvironmentAsync);
+    /// <param name="additionalBrowserArguments">附加浏览器参数（如 WebRTC IP 防护，§4.4；无则 null）。</param>
+    public static BrowserLifecycleService CreateLifecycleService(string? additionalBrowserArguments = null) =>
+        new BrowserLifecycleService(CreateEnvironmentAsync, additionalBrowserArguments);
 
     public void Navigate(string url)
     {
@@ -108,6 +121,116 @@ public partial class BrowserTabView : UserControl
             WebView.CoreWebView2?.Reload();
     }
 
+    // ===== 页内查找（S3）=====
+    // 实现依据：WebView2 SDK 1.0.4078.44 的 CoreWebView2Find 会话 API
+    // （core.Find → StartAsync(CoreWebView2FindOptions) / FindNext / FindPrevious / Stop，
+    // 结果经 MatchCountChanged / ActiveMatchIndexChanged 回报）。选项对象必须由
+    // core.Environment.CreateFindOptions() 创建，不能 new。
+
+    /// <summary>页面内按下 Ctrl+F 时触发（宿主据此打开查找条）。</summary>
+    public event EventHandler? FindRequested;
+
+    /// <summary>查找会话激活期间，页面内按下 Esc 时触发（宿主据此关闭查找条）。</summary>
+    public event EventHandler? FindCloseRequested;
+
+    /// <summary>命中结果变化（参数为命中总数与 1 起的活动序号，0 表示无活动命中）。</summary>
+    public event EventHandler<FindResultsChangedEventArgs>? FindResultsChanged;
+
+    /// <summary>当前标签是否支持页内查找（内核未就绪或 Runtime 不支持该 API 时为 false）。</summary>
+    public bool CanFind => _findAvailable;
+
+    /// <summary>最近一次查找会话的命中总数（不可用时为 0；仅供冒烟探针与诊断读取）。</summary>
+    public int FindMatchCount
+    {
+        get
+        {
+            try { return WebView.CoreWebView2?.Find.MatchCount ?? 0; }
+            catch { return 0; }
+        }
+    }
+
+    /// <summary>
+    /// 以指定查询词开启查找会话（空串等同于结束会话）。
+    /// 返回 false 表示该标签当前不可查找（内核未就绪 / 不支持 / 调用失败）。
+    /// </summary>
+    public async Task<bool> StartFindAsync(string? term)
+    {
+        var core = WebView.CoreWebView2;
+        if (!_findAvailable || core == null)
+            return false;
+
+        if (string.IsNullOrEmpty(term))
+        {
+            StopFind();
+            return true;
+        }
+
+        try
+        {
+            var options = core.Environment.CreateFindOptions();
+            options.FindTerm = term!;
+            options.ShouldHighlightAllMatches = true; // 高亮全部命中，与主流浏览器一致
+            options.SuppressDefaultFindDialog = true; // 自绘查找条，禁止内核再弹自带 UI
+            await core.Find.StartAsync(options).ConfigureAwait(true);
+            _findActive = true;
+            RaiseFindResults(core);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[BrowserTabView] 查找会话启动失败：{ex.GetType().Name}");
+            return false;
+        }
+    }
+
+    /// <summary>跳到下一个命中（无会话时内核侧静默忽略）。</summary>
+    public void FindNextMatch() => InvokeFind(core => core.Find.FindNext());
+
+    /// <summary>跳到上一个命中。</summary>
+    public void FindPreviousMatch() => InvokeFind(core => core.Find.FindPrevious());
+
+    /// <summary>结束查找会话（隐藏内核侧高亮）。关闭查找条时必须调用。</summary>
+    public void StopFind()
+    {
+        _findActive = false;
+
+        if (!_findAvailable)
+            return;
+
+        try { WebView.CoreWebView2?.Find.Stop(); }
+        catch (Exception ex) { Trace.WriteLine($"[BrowserTabView] 结束查找会话失败：{ex.GetType().Name}"); }
+    }
+
+    /// <summary>把键盘焦点交回网页（关闭查找条后让 Esc/方向键继续作用于页面）。</summary>
+    public void FocusPage()
+    {
+        try { WebView.Focus(); }
+        catch { /* 内核已释放时忽略 */ }
+    }
+
+    private void InvokeFind(Action<CoreWebView2> action)
+    {
+        var core = WebView.CoreWebView2;
+        if (!_findAvailable || core == null)
+            return;
+
+        try { action(core); }
+        catch (Exception ex) { Trace.WriteLine($"[BrowserTabView] 查找导航失败：{ex.GetType().Name}"); }
+    }
+
+    private void RaiseFindResults(CoreWebView2 core)
+    {
+        try
+        {
+            FindResultsChanged?.Invoke(this, new FindResultsChangedEventArgs(
+                core.Find.MatchCount, core.Find.ActiveMatchIndex));
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[BrowserTabView] 读取命中计数失败：{ex.GetType().Name}");
+        }
+    }
+
     /// <summary>
     /// 释放该标签的 WebView2 控件与其 CoreWebView2（关标签时调用）。
     /// 共享 Environment 不在此释放，仍归 BrowserLifecycleService 管理。
@@ -136,14 +259,14 @@ public partial class BrowserTabView : UserControl
         {
             TrySetDefaultBackgroundColor();
 
-            // 环境解析优先级：显式注入的 SharedEnvironment > 生命周期门面共享 Environment > 按 R7 自建
+            // 环境解析优先级：显式注入的 SharedEnvironment > Context.Lifecycle 共享 Environment > 按 R7 自建
             var environment = SharedEnvironment;
             if (environment == null)
             {
-                environment = Lifecycle != null
-                    ? (CoreWebView2Environment)await Lifecycle.GetSharedEnvironmentAsync().ConfigureAwait(true)
-                    : (CoreWebView2Environment)await CreateEnvironmentAsync(Path.Combine(AppPaths.CacheDirectory, "WebView2"))
-                        .ConfigureAwait(true);
+                environment = Context?.Lifecycle != null
+                    ? (CoreWebView2Environment)await Context.Lifecycle.GetSharedEnvironmentAsync().ConfigureAwait(true)
+                    : (CoreWebView2Environment)await CreateEnvironmentAsync(
+                        Path.Combine(AppPaths.CacheDirectory, "WebView2"), null).ConfigureAwait(true);
             }
 
             await WebView.EnsureCoreWebView2Async(environment);
@@ -180,13 +303,32 @@ public partial class BrowserTabView : UserControl
 
         _coreReady = true;
 
-        // 完整事件链入口（§5.4）：后续广告拦截/DNT 头注入/历史记录等在此管道扩展
+        // 完整事件链入口（§5.4）：标题 / 地址 / 图标随页面同步
         core.DocumentTitleChanged += (s, e) => TitleChanged?.Invoke(this, core.DocumentTitle);
         core.SourceChanged += (s, e) => UrlChanged?.Invoke(this, core.Source);
         core.FaviconChanged += OnFaviconChanged;
-        core.NavigationCompleted += (s, e) => { /* 预留：历史记录、拦截统计等 */ };
 
-        HookAdBlock(core);
+        // 历史记录（B2）：只记成功的顶层导航；隐私标签与本地页面在 RecordHistory 内排除。
+        // 顶层导航失败（证书错误、连接中断）不写历史，避免把失败页当成访问记录。
+        core.NavigationCompleted += (s, e) =>
+        {
+            if (!e.IsSuccess)
+                return;
+            RecordHistory(core.Source, core.DocumentTitle);
+        };
+
+        // 下载（B2）：保留 WebView2 自带下载提示，仅把生命周期落库，供下载列表取消/打开。
+        core.DownloadStarting += (s, e) => Downloads?.Track(e.DownloadOperation);
+
+        // §5.4 事件管道（设计 §4.1）：隐私头注入 / 三方 Cookie 剥离 / 广告拦截计数一处收口
+        HookWebPipeline(core);
+
+        // 新标签页 WebMessage 桥（设计 §4.2）：navigate / getStats / openSettings / addShortcut
+        core.WebMessageReceived += OnWebMessageReceived;
+
+        // 页内查找（S3）：会话对象与两个计数事件在此一次性挂接；Ctrl+F 需从内核侧上浮
+        HookFind(core);
+        TryHookAcceleratorKeys();
 
         WebView.Visibility = Visibility.Visible;
 
@@ -198,29 +340,223 @@ public partial class BrowserTabView : UserControl
         }
     }
 
-    // §5.3 广告拦截接入 WebView2 网络管道：
+    // 历史记录（B2）：隐私标签不写；本地页面与非 http/https 地址由仓储归一化兜底拒绝。
+    // 写入放线程池，失败只留诊断，绝不影响导航。
+    private void RecordHistory(string? url, string? title)
+    {
+        if (IsPrivate)
+            return;
+
+        var history = Context?.History;
+        if (history == null)
+            return;
+
+        var visitedAt = DateTimeOffset.Now;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await history.RecordAsync(url, title, visitedAt).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[BrowserTabView] 历史记录写入失败：{ex.GetType().Name}");
+            }
+        });
+    }
+
+    // 页内查找会话挂接：CoreWebView2.Find 在 Runtime 版本过旧时可能抛异常（属性本身不可用），
+    // 故整体 try/catch 并把 _findAvailable 置 false —— 查找条据此提示「当前内核不支持」，
+    // 而不是让 Ctrl+F 静默失败。
+    private void HookFind(CoreWebView2 core)
+    {
+        try
+        {
+            var find = core.Find;
+            if (find == null)
+                return;
+
+            find.MatchCountChanged += (s, e) => RaiseFindResults(core);
+            find.ActiveMatchIndexChanged += (s, e) => RaiseFindResults(core);
+            _findAvailable = true;
+        }
+        catch (Exception ex)
+        {
+            _findAvailable = false;
+            Trace.WriteLine($"[BrowserTabView] 页内查找不可用：{ex.GetType().Name}");
+        }
+    }
+
+    // Ctrl+F 从网页焦点上浮（S3）：WebView2 WPF 封装把 CoreWebView2Controller 作为 internal
+    // 属性持有，未公开 AcceleratorKeyPressed；这里沿用本文件既有做法（DefaultBackgroundColor
+    // 同样走反射）取控件，挂一次按键加速器。取不到就静默降级——此时 Ctrl+F 仅在应用界面
+    // 焦点击中时生效（MainWindow 的 PreviewKeyDown 兜底），不影响其它功能。
+    private void TryHookAcceleratorKeys()
+    {
+        try
+        {
+            var prop = typeof(Microsoft.Web.WebView2.Wpf.WebView2).GetProperty(
+                "CoreWebView2Controller", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (prop?.GetValue(WebView) is CoreWebView2Controller controller)
+                controller.AcceleratorKeyPressed += OnAcceleratorKeyPressed;
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[BrowserTabView] 加速键挂接失败：{ex.GetType().Name}");
+        }
+    }
+
+    private void OnAcceleratorKeyPressed(object? sender, CoreWebView2AcceleratorKeyPressedEventArgs e)
+    {
+        if (e.KeyEventKind != CoreWebView2KeyEventKind.KeyDown)
+            return;
+
+        // VK_F = 0x46：Ctrl+F 上浮给宿主打开查找条
+        if (e.VirtualKey == 0x46)
+        {
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == 0)
+                return;
+
+            e.Handled = true; // 阻止内核自带的查找 UI
+            FindRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        // VK_ESCAPE = 0x1B：仅当本标签的查找会话处于激活态才吞掉，
+        // 否则会抢走网页自身对 Esc 的处理（弹窗/预览关闭等）
+        if (e.VirtualKey == 0x1B && _findActive)
+        {
+            e.Handled = true;
+            FindCloseRequested?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    // §5.3 + §5.2 请求管道（docs/design/2026-10-23-privacy-stats-ntp.md §4.1）：
     // - 必须用带 RequestSourceKinds 的三参过滤器重载（两参重载已被官方弃用：
     //   跨源 iframe 的子资源不会触发 WebResourceRequested，广告 iframe 恰是重灾区）
     // - 处理器同步判定即返回（引擎实测均值 24µs/URL，无需 GetDeferral）
-    // - 不拦截 Document 主文档：引擎暂不求值 $ 修饰符，泛匹配规则误杀主导航的代价过高
-    private void HookAdBlock(CoreWebView2 core)
+    // - 注册条件：广告引擎有规则 **或** 任一隐私开关开（头注入需要管道承载；无任何需求则不挂，
+    //   该管道会让页面加载暂停等待 UI 线程处理，官方文档明确的性能开销）
+    private void HookWebPipeline(CoreWebView2 core)
     {
-        var engine = AdBlock;
-        if (engine == null || engine.BlockCount == 0)
+        var settings = Context?.Settings ?? new AppSettings();
+        var provider = Context?.AdBlockProvider;
+
+        // 有 provider 就挂管道：手动更新可能稍后才装入规则，管道已就绪才能即时生效。
+        var adBlockConfigured = provider != null ||
+            (Context?.AdBlock != null && Context.AdBlock.BlockCount > 0);
+
+        if (!adBlockConfigured && !settings.SendDoNotTrack && !settings.SendGPC && !settings.BlockThirdPartyCookies)
             return;
 
         core.AddWebResourceRequestedFilter(
             "*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
         core.WebResourceRequested += (s, e) =>
         {
-            if (e.ResourceContext == CoreWebView2WebResourceContext.Document)
+            var uri = e.Request.Uri;
+
+            // 本地资产（新标签页 file://）不走拦截/剥离管道：自家内容不存在广告/追踪，且避免误伤
+            if (uri != null && uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
                 return;
-            if (engine.IsBlocked(e.Request.Uri))
+
+            var isDocument = e.ResourceContext == CoreWebView2WebResourceContext.Document;
+
+            // 1) 追踪保护头（声明性；全部请求生效，含主文档）
+            if (settings.SendDoNotTrack)
+                e.Request.Headers.SetHeader("DNT", "1");
+            if (settings.SendGPC)
+                e.Request.Headers.SetHeader("Sec-GPC", "1");
+
+            // 2) 广告拦截：非主文档命中规则即 403（主文档不拦：引擎不求值 $ 修饰符，
+            //    泛匹配规则误杀主导航的代价过高）；命中计入隐私统计「广告」。
+            //    每请求重新读取 provider，手动更新规则后无需重建标签即可生效。
+            var engine = provider?.Current ?? Context?.AdBlock;
+            if (!isDocument && engine != null && engine.IsBlocked(uri))
             {
                 // 空内容 + 403 即取消该请求（args.Response 一经赋值请求不再放行）
                 e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
+                Context?.Stats?.RecordAdBlocked();
+                return;
+            }
+
+            // 3) 第三方 Cookie 剥离（仅子资源：顶层导航对目标站即第一方，剥了会破坏登录态）；
+            //    第三方判定由注入的 ThirdPartyDetector 基于随包 PSL 完成；未注入时回退末两标签。
+            //    只有请求确实携带 Cookie 并被移除时才计入追踪统计，避免把无 Cookie 的
+            //    第三方子资源也虚增为“已拦截追踪”。
+            var thirdParty = Context?.ThirdParty ?? ThirdPartyDetector.Fallback;
+            if (!isDocument && settings.BlockThirdPartyCookies
+                && thirdParty.IsThirdParty(core.Source, uri))
+            {
+                string? cookieHeader = null;
+                try { cookieHeader = e.Request.Headers.GetHeader("Cookie"); }
+                catch { /* 无该头或内核拒绝读取时视为没有可剥离内容 */ }
+
+                if (!string.IsNullOrEmpty(cookieHeader))
+                {
+                    e.Request.Headers.RemoveHeader("Cookie");
+                    Context?.Stats?.RecordTrackerBlocked();
+                }
             }
         };
+    }
+
+    /// <summary>新标签页动作上浮（openSettings / addShortcut：设置面板与快捷方式管理属 Phase 6/4 后续，宿主先以提示承接）。</summary>
+    public event EventHandler<string>? NewTabAction;
+
+    private const string NtpChannel = "ntp";
+
+    // 新标签页 WebMessage 桥（设计 §4.2）：仅处理 channel='ntp' 的消息。
+    // 安全门控：任意网页均可 chrome.webview.postMessage，故仅当 core.Source 为新标签页 URI 时
+    // 才受理（官方文档同样要求校验 Source 后再使用宿主能力）——否则等于把导航/设置入口暴露给所有站点。
+    private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        var core = WebView.CoreWebView2;
+        if (core == null || !IsNewTabSource(core.Source))
+            return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(e.WebMessageAsJson ?? "null");
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return;
+            if (!root.TryGetProperty("channel", out var channel) || channel.GetString() != NtpChannel)
+                return;
+            if (!root.TryGetProperty("type", out var type))
+                return;
+
+            switch (type.GetString())
+            {
+                case "navigate":
+                    if (root.TryGetProperty("url", out var url))
+                        Navigate(url.GetString() ?? string.Empty);
+                    break;
+                case "getStats":
+                    ReplyStats(core);
+                    break;
+                case "openSettings":
+                case "addShortcut":
+                    NewTabAction?.Invoke(this, type.GetString()!);
+                    break;
+            }
+        }
+        catch (JsonException)
+        {
+            // 页面发来的非 JSON / 半截消息：忽略（零遥测原则，不记录内容）
+        }
+    }
+
+    // 新标签页来源判定：core.Source 落在 webui 目录内即受理（目录前缀比对，
+    // 兼容 URI 规范化差异；大小写不敏感——Windows 路径不区分大小写）
+    private static bool IsNewTabSource(string? source) =>
+        !string.IsNullOrEmpty(source) && source!.StartsWith(WebUiAssets.FolderUri, StringComparison.OrdinalIgnoreCase);
+
+    // 隐私统计回复：与 app.js 的桥约定对齐（{channel:'ntp', type:'stats', trackers, ads}）
+    private void ReplyStats(CoreWebView2 core)
+    {
+        var (ads, trackers) = Context?.Stats?.Snapshot ?? (0, 0);
+        core.PostWebMessageAsJson(JsonSerializer.Serialize(
+            new { channel = NtpChannel, type = "stats", trackers, ads }));
     }
 
     // WebView2 favicon 变更：取回 PNG 流解码为 ImageSource（无图标则 null），广播给宿主回填标签。
@@ -282,10 +618,14 @@ public partial class BrowserTabView : UserControl
         return "https://" + trimmed;
     }
 
-    private static async Task<object> CreateEnvironmentAsync(string userDataFolder)
+    private static async Task<object> CreateEnvironmentAsync(string userDataFolder, string? additionalBrowserArguments)
     {
         Directory.CreateDirectory(userDataFolder);
-        return await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder).ConfigureAwait(false);
+        var options = string.IsNullOrEmpty(additionalBrowserArguments)
+            ? null
+            : new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = additionalBrowserArguments };
+        // 三参重载：browserExecutableFolder 传 null = 使用已安装的 WebView2 Runtime（官方文档口径）
+        return await CoreWebView2Environment.CreateAsync(null, userDataFolder, options).ConfigureAwait(false);
     }
 
     private void TrySetDefaultBackgroundColor()
@@ -337,4 +677,20 @@ public partial class BrowserTabView : UserControl
             Trace.WriteLine($"[BrowserTabView] 打开 Runtime 下载页失败：{ex}");
         }
     }
+}
+
+/// <summary>页内查找的命中结果（<see cref="FindResultsChangedEventArgs.ActiveMatchIndex"/> 为 0 表示无活动命中）。</summary>
+public sealed class FindResultsChangedEventArgs : EventArgs
+{
+    public FindResultsChangedEventArgs(int matchCount, int activeMatchIndex)
+    {
+        MatchCount = matchCount;
+        ActiveMatchIndex = activeMatchIndex;
+    }
+
+    /// <summary>命中总数。</summary>
+    public int MatchCount { get; }
+
+    /// <summary>活动命中序号（1 起；0 = 无活动命中）。</summary>
+    public int ActiveMatchIndex { get; }
 }

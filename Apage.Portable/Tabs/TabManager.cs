@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -17,6 +18,7 @@ namespace Apage.Portable.Tabs
     /// 休眠：非活跃标签空闲超阈值即释放其内核（View 置空、仅留可恢复元数据），下次激活时懒物化；
     /// 会话恢复亦为懒加载（仅物化当前标签，其余保持休眠直到被点击）。
     /// 重排：MoveTab 仅改集合顺序，内核按可见性宿主、与显示顺序无关，无需重排 _host。
+    /// 新标签页：空白标签物化时导航到本地新标签页（设计 §4.3）；会话保存排除新标签页（与 about: 同等对待）。
     /// </summary>
     public sealed class TabManager : IDisposable
     {
@@ -25,16 +27,16 @@ namespace Apage.Portable.Tabs
         private static readonly TimeSpan HibernateScanInterval = TimeSpan.FromSeconds(60);
 
         private readonly Panel _host;
-        private readonly BrowserLifecycleService _lifecycle;
-        private readonly AdBlockRuleEngine? _adBlock;
+        private readonly BrowserTabContext _context;
+        private readonly Services.DownloadCoordinator? _downloads;
         private readonly DispatcherTimer _hibernateTimer;
         private bool _disposed;
 
-        public TabManager(Panel host, BrowserLifecycleService lifecycle, AdBlockRuleEngine? adBlock = null)
+        public TabManager(Panel host, BrowserTabContext context, Services.DownloadCoordinator? downloads = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
-            _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
-            _adBlock = adBlock; // 可选：全部标签共享同一引擎实例（规则索引只建一份）
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+            _downloads = downloads;
 
             _hibernateTimer = new DispatcherTimer(DispatcherPriority.Background)
             {
@@ -52,6 +54,9 @@ namespace Apage.Portable.Tabs
 
         /// <summary>当前标签切换，或当前标签的 URL/标题变化时触发（宿主据此回填地址栏与窗口标题、滚入视区）。</summary>
         public event EventHandler? ActiveTabChanged;
+
+        /// <summary>新标签页动作上浮（openSettings / addShortcut，源自 BrowserTabView.NewTabAction）。</summary>
+        public event EventHandler<string>? TabAction;
 
         /// <summary>新建标签并（默认）激活；url 为空则为空白标签。新标签始终追加在集合末尾（夸克式）。</summary>
         public BrowserTab NewTab(string? url = null, bool activate = true)
@@ -128,7 +133,7 @@ namespace Apage.Portable.Tabs
         }
 
         /// <summary>
-        /// 捕获当前会话（退出时保存）：排除隐私标签（roadmap 红线）与不可恢复地址；
+        /// 捕获当前会话（退出时保存）：排除隐私标签（roadmap 红线）、新标签页与不可恢复地址；
         /// ActiveIndex 指向捕获后列表中的当前标签。休眠标签同样被捕获（元数据保留）。
         /// </summary>
         public SessionState CaptureSession()
@@ -136,8 +141,9 @@ namespace Apage.Portable.Tabs
             var state = new SessionState();
             foreach (var t in Tabs)
             {
-                if (t.IsPrivate) continue;                          // 隐私标签绝不写入
-                if (!SessionService.IsRestorableUrl(t.Url)) continue; // 空白/about: 等不恢复
+                if (t.IsPrivate) continue;                              // 隐私标签绝不写入
+                if (t.Url == WebUiAssets.IndexUri) continue;            // 新标签页不恢复（与 about: 同等对待）
+                if (!SessionService.IsRestorableUrl(t.Url)) continue;   // 空白/about: 等不恢复
                 if (t.IsCurrent) state.ActiveIndex = state.Tabs.Count;
                 state.Tabs.Add(new SessionTab { Url = t.Url, Title = t.Title });
             }
@@ -178,7 +184,7 @@ namespace Apage.Portable.Tabs
 
         // ===== 物化 / 休眠 =====
 
-        // 为标签懒物化 WebView 宿主：创建控件、接线事件、加入容器、（有保存地址则）导航
+        // 为标签懒物化 WebView 宿主：创建控件、接线事件、加入容器、导航（有地址走地址，空白标签走新标签页）
         private void MaterializeView(BrowserTab tab)
         {
             if (tab.View != null)
@@ -186,8 +192,9 @@ namespace Apage.Portable.Tabs
 
             var view = new BrowserTabView
             {
-                Lifecycle = _lifecycle,       // 必须在加入可视树（Loaded）前赋值
-                AdBlock = _adBlock,           // 同上：内核就绪时据此决定是否挂 WebResourceRequested
+                Context = _context,           // 必须在加入可视树（Loaded）前赋值
+                IsPrivate = tab.IsPrivate,    // 隐私标签不写历史（与会话捕获同一红线）
+                Downloads = _downloads,
                 Visibility = Visibility.Collapsed,
             };
 
@@ -203,12 +210,14 @@ namespace Apage.Portable.Tabs
                 if (tab.IsCurrent) ActiveTabChanged?.Invoke(this, EventArgs.Empty);
             };
             view.FaviconChanged += (s, img) => tab.Favicon = img;
+            view.NewTabAction += (s, action) => TabAction?.Invoke(this, action);
 
             tab.View = view;
             _host.Children.Add(view);
 
-            if (!string.IsNullOrEmpty(tab.Url))
-                view.Navigate(tab.Url); // 内核未就绪时会自动暂存
+            // 空白标签 → 本地新标签页（设计 §4.3）；否则导航到保存/给定的地址（内核未就绪时会自动暂存）
+            var target = string.IsNullOrEmpty(tab.Url) ? WebUiAssets.IndexUri : tab.Url;
+            view.Navigate(target);
         }
 
         // 休眠标签：释放内核、移出容器、View 置空，保留标题/地址/图标元数据
