@@ -162,6 +162,8 @@
     engineIndex = index;
     applyEngine();
     try { localStorage.setItem(ENGINE_KEY, msg.searchEngine); } catch (_) { }
+    // R9：引导卡打开时用宿主返回的隐私现状刷新只读清单
+    if (lastConfigPrivacy === null) renderOnboardingPrivacy(msg.privacy);
   });
 
   // 输入是 URL 则直接导航，否则用当前引擎搜索
@@ -186,6 +188,101 @@
     var target = resolveTarget(searchInput.value);
     if (target) navigate(target);
   });
+
+  /* ------------------------------------------------------------------------
+     R9 首启引导卡：一次性；只读展示隐私现状 + 选默认搜索引擎。
+     硬约束（红线 2）：不提供任何隐私默认值改写入口——引导过程只读展示，
+     唯一可写项是默认搜索引擎（既有 setSearchEngine 桥，非隐私默认值）。
+     措辞与 docs/product-design.md §5.2 能力边界声明保持一致。
+     ------------------------------------------------------------------------ */
+
+  var ONBOARDING_KEY = 'apage.ntp.onboardingSeen';
+  var onboardingDialog = document.getElementById('onboarding-dialog');
+  var onboardingEngines = document.getElementById('onboarding-engines');
+  var onboardingPrivacy = document.getElementById('onboarding-privacy');
+  var onboardingDone = document.getElementById('onboarding-done');
+  var onboardingReopen = document.getElementById('btn-onboarding');
+  var lastConfigPrivacy = null;
+
+  var PRIVACY_LABELS = [
+    { key: 'dnt',        on: '发送 Do Not Track：开（声明性请求头，多数站点忽略）' },
+    { key: 'gpc',        on: '发送 Sec-GPC：开（声明性请求头，部分法域有法律效力）' },
+    { key: 'webrtc',     on: 'WebRTC IP 泄露防护：开（防本地/公网 IP 泄露，不断连会议网站）' },
+    { key: 'fetchIcons', on: '获取搜索引擎图标：开（仅白名单四引擎各抓一次，可关）',
+                          off: '获取搜索引擎图标：关（不发起图标请求，回落字标）' }
+  ];
+
+  function onboardingSeen() {
+    try { return localStorage.getItem(ONBOARDING_KEY) === '1'; } catch (_) { return false; }
+  }
+
+  function markOnboardingSeen() {
+    try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* file:// 下降级：每次启动展示 */ }
+  }
+
+  function renderOnboardingEngines() {
+    onboardingEngines.textContent = '';
+    ENGINES.forEach(function (engine, i) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'onboarding-engine' + (i === engineIndex ? ' selected' : '');
+      btn.textContent = engine.name;
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', i === engineIndex ? 'true' : 'false');
+      btn.addEventListener('click', function () {
+        engineIndex = i;
+        applyEngine();
+        persistEngine();
+        requestEngineIconIfMissing();
+        renderOnboardingEngines();
+      });
+      onboardingEngines.appendChild(btn);
+    });
+  }
+
+  function renderOnboardingPrivacy(privacy) {
+    lastConfigPrivacy = privacy || null;
+    onboardingPrivacy.textContent = '';
+    PRIVACY_LABELS.forEach(function (item) {
+      var value = privacy ? privacy[item.key] : true; // 配置未达时按隐私默认全开展示
+      var li = document.createElement('li');
+      var mark = document.createElement('span');
+      mark.className = 'onboarding-mark';
+      mark.textContent = value ? '✓' : '—';
+      var text = document.createElement('span');
+      text.textContent = value ? item.on : (item.off || item.on);
+      li.appendChild(mark);
+      li.appendChild(text);
+      onboardingPrivacy.appendChild(li);
+    });
+  }
+
+  function openOnboarding() {
+    renderOnboardingEngines();
+    renderOnboardingPrivacy(lastConfigPrivacy);
+    if (typeof onboardingDialog.showModal === 'function') {
+      onboardingDialog.showModal();
+    } else {
+      onboardingDialog.setAttribute('open', '');
+    }
+  }
+
+  onboardingDone.addEventListener('click', function () {
+    markOnboardingSeen();
+    if (typeof onboardingDialog.close === 'function') onboardingDialog.close();
+    else onboardingDialog.removeAttribute('open');
+  });
+
+  if (onboardingReopen) {
+    onboardingReopen.addEventListener('click', openOnboarding);
+  }
+
+  // 首启展示：未看过引导卡时自动打开（localStorage 不可用时降级为每次展示）
+  if (!onboardingSeen()) {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { openOnboarding(); });
+    });
+  }
 
   /* ------------------------------------------------------------------------
      d) 快捷方式：本地增删并持久化（最多 11 个，每行最多 6 个）

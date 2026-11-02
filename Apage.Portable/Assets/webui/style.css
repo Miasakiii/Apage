@@ -548,6 +548,150 @@ button {
   font-size: var(--text-xs);
 }
 
+
+/* ==========================================================================
+   R9 首启引导卡：与 shortcut-dialog 同款白卡容器（显式居中约束同理），
+   内容分「默认搜索引擎（可选）」与「隐私保护（只读）」两节。
+   ========================================================================== */
+
+#onboarding-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(420px, calc(100vw - 32px));
+  height: fit-content;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, .72);
+  background: rgba(255, 255, 255, .98);
+  color: #1F2329;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .42);
+}
+
+#onboarding-dialog[open] {
+  animation: shortcut-dialog-in 160ms var(--ease);
+}
+
+#onboarding-dialog::backdrop {
+  background: rgba(8, 12, 24, .48);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.onboarding-card h2 {
+  margin: 0 0 2px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+.onboarding-sub {
+  margin: 0 0 16px;
+  font-size: var(--text-sm);
+  color: #6B7280;
+}
+
+.onboarding-section h3 {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.onboarding-section + .onboarding-section {
+  margin-top: 16px;
+}
+
+.onboarding-engines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.onboarding-engine {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid #E5E7EB;
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-family: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.onboarding-engine:hover {
+  background: #F3F4F6;
+}
+
+.onboarding-engine.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.onboarding-privacy {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.onboarding-privacy li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--text-xs);
+  color: #374151;
+  line-height: 1.5;
+}
+
+.onboarding-mark {
+  flex: none;
+  width: 14px;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.onboarding-hint {
+  margin: 8px 0 0;
+  font-size: var(--text-xs);
+  color: #9CA3AF;
+  line-height: 1.5;
+}
+
+.onboarding-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.onboarding-primary {
+  height: 36px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter var(--dur-fast) var(--ease);
+}
+
+.onboarding-primary:hover {
+  filter: brightness(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #onboarding-dialog[open] { animation: none; }
+}
+
 #shortcut-actions {
   display: flex;
   justify-content: flex-end;

@@ -628,12 +628,25 @@ public partial class BrowserTabView : UserControl
         !string.IsNullOrEmpty(source) &&
         string.Equals(source, WebUiAssets.IndexUri, StringComparison.OrdinalIgnoreCase);
 
-    // 新标签页配置回复：当前只暴露搜索引擎，作为页面 localStorage 的权威值。
+    // 新标签页配置回复：搜索引擎作为页面 localStorage 的权威值；
+    // privacy 为只读现状快照（R9 引导卡展示用）——引导页只展示、不提供任何隐私默认值改写入口。
     private void ReplyConfig(CoreWebView2 core)
     {
-        var engine = Context?.Settings?.SearchEngine ?? "bing";
-        core.PostWebMessageAsJson(JsonSerializer.Serialize(
-            new { channel = NtpChannel, type = "config", searchEngine = engine }));
+        var settings = Context?.Settings;
+        var engine = settings?.SearchEngine ?? "bing";
+        core.PostWebMessageAsJson(JsonSerializer.Serialize(new
+        {
+            channel = NtpChannel,
+            type = "config",
+            searchEngine = engine,
+            privacy = new
+            {
+                dnt = settings?.SendDoNotTrack ?? true,
+                gpc = settings?.SendGPC ?? true,
+                webrtc = settings?.WebRTCIPProtection ?? true,
+                fetchIcons = settings?.FetchEngineIcons ?? true,
+            },
+        }));
     }
 
     /// <summary>
