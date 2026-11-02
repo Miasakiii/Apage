@@ -16,13 +16,14 @@
 
 ## 发布现状（2026-11-02）
 
-- **S0–S3 功能包已完成**（D1/A1/B1/C1/A2/D2/B2/A3/S3），P0/P1 硬化切片已落地：**305 项 Core 单测**、五条红线、Release 构建、五信号 smoke、真实数据往返、查找条与提示条布局探针通过。
+- **S0–S3 功能包已完成**（D1/A1/B1/C1/A2/D2/B2/A3/S3），P0/P1 硬化切片已落地；2026-11-02 参考仓库调研与优化方案 Phase 0–D 实施完成（[实施记录](docs/design/2026-11-02-reference-repo-optimization.md)）：**467 项 Core 单测**、五条红线、Release 构建、五信号 smoke、真实数据往返、查找条与提示条布局探针、首启零非白名单出站探针通过。
 - **隐私承诺纠偏**：真机探针证实 `WebResourceRequested` 删除 Cookie 后 WebView2 网络栈仍会重新发送，**“第三方 Cookie 剥离/追踪计数”已从能力、设置、NTP/隐私盾与宣传中移除**；旧字段仅保留兼容且默认 `false`。证据见 [Cookie 探针](docs/spikes/results/cookie-privacy.md) 与 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)。
-- **生产单文件与发布门禁**：在干净工作区 `137bddb` 上执行 `build\package.ps1 -SkipBuild -RequireCleanWorktree` 通过，产出 **1 文件 / 4,068,352 字节** 的 `Apage.Portable.exe`（版本 0.1.0.0，SHA-256 `573E5F52…9E582FEE`，`worktreeDirty=false`），并生成 release manifest 与独立 legal bundle。尚未签名，签名与签名后复验仍属 S4。
+- **生产单文件与发布门禁**：在干净工作区 `137bddb` 上执行 `build\package.ps1 -SkipBuild -RequireCleanWorktree` 通过，产出 **1 文件 / 4,068,352 字节** 的 `Apage.Portable.exe`（版本 0.1.0.0，SHA-256 `573E5F52…9E582FEE`，`worktreeDirty=false`）——此为优化方案实施前的历史证据快照，当前产物状态见下方数字锚点约定。尚未签名，签名与签名后复验仍属 S4。
 - **隐私资产已闭环**：PSL `2026-10-28` 版本；内置 EasyList/EasyPrivacy 快照 **94,646 条**通过 SHA-256 校验，MIT/MPL/CC 许可全文随包；运行时零自动更新请求。
 - **启动指标（2026-11-02，正式单文件 3 轮）**：首启 ContentRendered **1026.2ms**，热启中位 **959.25ms**。热启通过本机 1000ms 打包门禁，但首启仍超过 1 秒，且当前不是稳定参考机；完整发布验收未通过。
 - **数据、查找与规则更新已闭环**：书签/历史/下载落 SQLite（隐私标签不记历史），支持 Chrome/Edge 书签 HTML 导入；地址栏本地建议与 Ctrl+F 页内查找可用；规则更新仅在设置里手动点击触发，逐跳 HTTPS、全程串行、校验后原子替换，热更新保留 `adblock/*.txt` 用户规则。
-- **数字锚点约定**：体积、SHA-256 与启动指标以最近一次 `build\package.ps1` 的 `artifacts/` 证据文件（`portable.metrics.json` / `portable.sha256` / `release-startup/metrics.json`）为准；本文中的数字均为对应提交的证据快照（如 4,068,352 字节 = 干净工作区 `137bddb`）。Phase A（R1–R4/R11）后已重新打包：单文件 **4,152,832 字节**（`cdaa357` + 图标优化，开发目标内；启动基准见 artifacts/release-startup/，本机负载下 warm median 1086.85ms 未过门禁，属参考机复验项）。
+- **数字锚点约定**：体积、SHA-256 与启动指标以最近一次 `build\package.ps1` 的 `artifacts/` 证据文件（`portable.metrics.json` / `portable.sha256` / `release-startup/metrics.json`）为准；本文中的数字均为对应提交的证据快照（如 4,068,352 字节 = 干净工作区 `137bddb`）。Phase 0–D 全部落地后重新打包：单文件 **4,190,208 字节**（`f162e20` 起，含 bangs 表与 MorphCore pilot，净增约 122KB，仍在 4.25MB 开发目标内；启动基准见 artifacts/release-startup/，本机负载下 warm median 约 1080ms 未过门禁，属参考机复验项）。
+- **参考仓库优化已落地**（2026-11-02，[实施记录](docs/design/2026-11-02-reference-repo-optimization.md)）：按站点防护覆盖（被误伤的站点单独关闭，不动全局默认）、页级拦截计数 + 地址栏盾牌徽章、便携站点允许清单（`allowlist.txt`）、首启引导卡、深色主题、地址栏 bangs 快捷搜索（`!gh`/`!w`/`!yt` 等）、Menu↔Close 图标形变 pilot、被拦请求返回透明空资源、内核命令行参数收口与首启零出站门禁。
 - **站点图标**：新标签页优先显示站点自带 favicon。用户访问站点时由 WebView2 已取回的图标直接落盘（零额外请求）；四个搜索引擎图标为开箱可用，会在本地无缓存时各抓取一次 `favicon.ico`（HTTPS、仅白名单主机、可在设置关闭）。用户自己添加的站点不做抓取，无图标时回落品牌色字标（[证据](docs/spikes/results/favicon-cache.md)）。
 - **证据与后续顺序**：见 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)、[S4 硬化验证](docs/design/2026-11-02-s4-hardening-validation.md)、[Cookie 探针](docs/spikes/results/cookie-privacy.md)、[S4 启动复验记录](docs/design/2026-11-02-s4-startup-recheck.md)、[B2/A3 实施记录](docs/design/2026-10-29-b2-data-a3-rule-update.md)、[D2 发布工程记录](docs/design/2026-10-29-d2-release-engineering.md)、[签名手册](docs/release/signing.md)、[A2 实施记录](docs/design/2026-10-29-a2-psl-rule-snapshot.md)、[S2 第一批实施记录](docs/design/2026-10-29-s2-first-slice.md)、[S1 验证结果](docs/spikes/results/single-file.md) 与 [v0.1 发布收敛计划](docs/design/2026-10-28-v01-release-convergence.md)。
 
@@ -32,7 +33,7 @@
 
 - **WebView2 Runtime 自身诊断数据不可控**：微软文档明确其「无论 Windows 诊断数据设置如何」都会收集性能/可靠性所需数据，宿主应用只能控制 SmartScreen 与自定义崩溃报告。Apage 的「零遥测」覆盖 Apage 自身代码（出站路径经 `build\check-redlines.ps1` 文件级白名单 + `build\outbound-probe.ps1` 首启零非白名单出站门禁双重锁死），不覆盖 Runtime 自身。
 - **无指纹防护**：WebGL/Canvas/WebAudio/WebGPU 参数在 WebView2 壳层不可干预；隐私能力止步于「网络层拦截 + 头部信号（DNT/GPC）+ WebRTC IP 防护」。
-- **无恶意软件黑名单**：ABP 引擎只做广告/跟踪规则拦截；SmartScreen 信誉检查默认保留。
+- **无恶意软件黑名单**：ABP 引擎只做广告/跟踪规则拦截；SmartScreen 信誉检查**已默认关闭**（它会把不在本地流行名单的导航 URL 整址上传微软，关闭与「URL 不外传」定位一致，但失去内核级钓鱼/恶意站点提示）。
 - **拦截能力边界**：ABP 子串索引可执行的网络规则子集（含 `$` 修饰符条件规则 fail-closed 拒收）；化妆规则（`##`）后置 Phase 7+；「立即更新规则」之外没有任何自动/静默更新。
 - **站点图标**：未访问过的用户站点没有图标（不联网补图）；引擎图标抓取失败仅在当次会话内不重试。
 - **WebView2 Runtime 是即插即用前提**：Win11 默认预装；未安装时给出中文引导面板，不静默联网下载。
@@ -45,7 +46,7 @@
 | 层级 | 便携版（Apage.Portable，主力） |
 |------|------------------------------|
 | 运行时 | .NET Framework 4.8（Win10/11 系统自带） |
-| 体积 | 发布目标：签名后 <5MB；当前未签名产物实测 4,068,352 字节单 EXE |
+| 体积 | 发布目标：签名后 <5MB；当前未签名产物实测 4,190,208 字节单 EXE（历史快照 4,068,352 = `137bddb`） |
 | 定位 | U盘即插即用（前提：已装 WebView2 Runtime） |
 | 共享层 | Apage.Core（.NET Standard 2.0，为未来桌面版衍生预留） |
 | UI | WPF（当前 code-behind；MVVM 分层为预留，当前未引入 MVVM 包） |
@@ -182,7 +183,7 @@ dotnet build Apage.Core/Apage.Core.csproj -c Release
 # 发布便携版（D1 已完成；签名与最终复验属 S4）
 # .NET FX 4.8 不支持 PublishSingleFile；生产使用 Costura + NativeBootstrap
 # build\build.ps1 的 bin 目录仍是多文件调试布局；正式分发以 package.ps1 的单 EXE 为准
-# 发布产物：artifacts\portable\Apage.Portable.exe（1 文件，当前 4,068,352 字节，版本 0.1.0.0）
+# 发布产物：artifacts\portable\Apage.Portable.exe（1 文件，当前 4,190,208 字节，版本 0.1.0.0）
 ```
 
 > **发布说明**：v0.1~v1.0 单押便携版（Apage.Portable），基于 .NET Framework 4.8（Win10/11 系统自带）实现真即插即用（前提：目标机已装 WebView2 Runtime）。桌面版（Apage.Desktop，.NET 8 自包含）暂缓，仅便携版验证 PMF 后条件启动。Apage.Core（.NET Standard 2.0）保留分层以备未来衍生。详见 [docs/product-design.md](docs/product-design.md)。
