@@ -43,3 +43,7 @@ _*.png
 .tmp-verify/
 .workbuddy/
 .vscode/
+.stepcode/
+
+# ---- 第三方画布工具的本地会话状态（图标设计过程文件，非项目源）----
+/Apage图标/
