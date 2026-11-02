@@ -41,8 +41,9 @@ public static class BrowserArguments
     };
 
     /// <summary>
-    /// 关闭一组 Edge 侧 feature：msWebOOUI/msPdfOOUI（PDF 查看器 UI）、msSmartScreenProtection（信誉检查，
-    /// 另见 AppSettings.DisableReputationChecking 的显式取舍，R12）、OptimizationGuideModelDownloading
+    /// 关闭一组 Edge 侧 feature：msWebOOUI/msPdfOOUI（PDF 查看器 UI）、msSmartScreenProtection（信誉检查：
+    /// SmartScreen 会把不在本地流行名单的导航 URL 整址发送微软，默认关闭与「URL 不外传」定位一致；
+    /// API 层反选开关 R12 待决策，未落地前这是唯一控制点）、OptimizationGuideModelDownloading
     /// （会静默联网下载 ML 模型，与「不静默联网」红线正面冲突）、MediaRouter。
     /// </summary>
     private const string DisableFeatures =

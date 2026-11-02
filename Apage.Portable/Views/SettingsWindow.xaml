@@ -83,7 +83,7 @@
                         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
                                    FontSize="{DynamicResource Apage.FontSize.Xs}"
                                    Foreground="{DynamicResource Apage.Brush.TextTertiary}"
-                                   Text="能力边界：Apage 自身零遥测、零后台请求（出站白名单见产品文档 §5.2）；WebView2 Runtime 自身的诊断数据不受 Apage 控制；不提供指纹防护与恶意软件黑名单；SmartScreen 信誉检查默认保留。"/>
+                                   Text="能力边界：Apage 自身零遥测、零后台请求（出站白名单见产品文档 §5.2）；WebView2 Runtime 自身的诊断数据不受 Apage 控制；不提供指纹防护与恶意软件黑名单；SmartScreen 信誉检查已默认关闭（会把非名单导航 URL 上传微软，见产品文档 §5.2）。"/>
 
                         <Grid Margin="0,14,0,0">
                             <Grid.ColumnDefinitions>

@@ -527,7 +527,7 @@ Apage 的隐私叙事明确止步于「网络层拦截 + 头部信号 + WebRTC I
 | Apage 自身 | 零遥测、零后台请求；仅两条用户触发出站路径（规则更新、引擎图标抓取），由 `build\check-redlines.ps1` 文件级白名单 + `build\outbound-probe.ps1` 首启零非白名单出站门禁双重锁死 |
 | WebView2 Runtime | 微软文档明确其「无论 Windows 诊断数据设置如何」都会收集性能/可靠性所需数据，宿主仅能控制 SmartScreen 与自定义崩溃报告——**不受 Apage 控制**，本行即披露义务 |
 | 指纹防护 | 不提供。WebGL/Canvas/WebAudio/WebGPU 参数在 WebView2 壳层不可干预，不做「Brave 级指纹防护」表述 |
-| 恶意软件黑名单 | 不提供。ABP 引擎只做广告/跟踪规则拦截；SmartScreen 信誉检查默认保留，关闭它是设置里的显式取舍（默认关） |
+| 恶意软件黑名单 | 不提供。ABP 引擎只做广告/跟踪规则拦截；SmartScreen 信誉检查经 R1 内核参数（`--disable-features=msSmartScreenProtection`）**默认关闭**——SmartScreen 会把不在本地流行名单中的导航 URL 整址发送微软，关闭与「URL 不外传」定位一致，但失去内核级钓鱼/恶意提示；API 层反选开关（R12）待决策，不做双重控制 |
 | 拦截能力边界 | ABP 子串索引可执行的网络规则子集；含 `$` 修饰符条件规则 fail-closed 拒收；化妆规则（`##`）后置 Phase 7+ |
 
 新增任何隐私相关能力必须同步更新本表（AGENTS.md 红线 4 披露义务）。
