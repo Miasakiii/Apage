@@ -10,6 +10,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media.Animation;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Apage.Core.Configuration;
 using Apage.Core.Data;
@@ -42,7 +44,7 @@ namespace Apage.Portable
 
         private readonly DispatcherTimer _toastTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromSeconds(1.8),
+            Interval = TimeSpan.FromSeconds(2.5),
         };
 
         // 页内查找（S3）：状态机在 Core（可单测），此处只管 UI 与内核调用。
@@ -1185,6 +1187,12 @@ namespace Apage.Portable
             ToastPopup.IsOpen = true;   // Opened 事件里做首次定位与穿透设置
             PositionToast();
             ApplyToastClickThrough();
+            // 下滑 200ms 入场（frontend-design §5.4）：只动 RenderTransform，Popup 只负责定位
+            var slide = new DoubleAnimation(-8, 0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+            };
+            ToastTransform.BeginAnimation(TranslateTransform.YProperty, slide);
             _toastTimer.Stop();
             _toastTimer.Start();
         }
@@ -1207,7 +1215,8 @@ namespace Apage.Portable
             var hostHeight = TabHost.ActualHeight;
 
             ToastPopup.HorizontalOffset = Math.Max(8, (hostWidth - size.Width) / 2);
-            ToastPopup.VerticalOffset = Math.Max(8, hostHeight - size.Height - 24);
+            // 顶部居中（对齐 frontend-design §5.4 规范：下滑 200ms 入场）
+            ToastPopup.VerticalOffset = Math.Max(8, 24);
         }
 
         // 提示条只展示不交互：把 Popup 自己的窗口置为「鼠标穿透 + 不激活」，

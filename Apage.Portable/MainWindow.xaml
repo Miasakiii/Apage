@@ -201,6 +201,9 @@
                     Background="{DynamicResource Apage.Brush.Surface}"
                     BorderBrush="{DynamicResource Apage.Brush.Border}"
                     BorderThickness="1">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="ToastTransform"/>
+                </Border.RenderTransform>
                 <TextBlock x:Name="ToastText" FontSize="12"
                            Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
             </Border>
