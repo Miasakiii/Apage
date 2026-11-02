@@ -2,10 +2,13 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using Apage.Core.Configuration;
+using Apage.Core.Models;
 using Apage.Core.Services;
 using Apage.Portable.Views;
+using Microsoft.Win32;
 
 namespace Apage.Portable
 {
@@ -18,21 +21,60 @@ namespace Apage.Portable
     {
         private AppServices? _services;
         private BrowserLifecycleService? _lifecycle;
+        private SiteShieldStore? _siteShields;
+        private SiteAllowList? _siteAllowList;
+        private bool _smokeMode;
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            StartupMetrics.Arm(e.Args);
+            StartupMetrics.Mark("OnStartup");
             base.OnStartup(e);
 
-            // 单实例判定（R13）：Mutex 名含数据目录哈希；已有实例持有则提示并退出
+            // 发布线冒烟模式（--smoke）：复用真实启动路径，五信号验证后自行退出（见 SmokeCheck）
+            _smokeMode = SmokeCheck.IsRequested(e.Args);
             _services = new AppServices(AppPaths.DataDirectory);
+            HookLocalDiagnostics(_services.LocalLog);
+            if (_smokeMode)
+                SmokeCheck.HookCrashFastExit(this);
+
+            // 单实例判定（R13）：Mutex 名含数据目录哈希；已有实例持有则提示并退出
             if (!_services.SingleInstance.TryAcquire(out _))
             {
-                MessageBox.Show(
-                    "Apage 已在运行（同一数据目录只允许一个实例）。",
-                    "Apage", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (!_smokeMode)
+                {
+                    // 冒烟模式无人值守，绝不弹阻塞对话框，只经退出码回传冲突
+                    MessageBox.Show(
+                        "Apage 已在运行（同一数据目录只允许一个实例）。",
+                        "Apage", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                StartupMetrics.Complete("single-instance-conflict", SmokeCheck.ExitSingleInstanceConflict);
                 _services.Dispose();
                 _services = null;
-                Shutdown();
+                Shutdown(_smokeMode ? SmokeCheck.ExitSingleInstanceConflict : 0);
+                return;
+            }
+
+            // 单文件原生库必须在 WebView2/SQLite 首次 P/Invoke 前预加载。
+            // 失败时诚实中止并保留诊断，不静默降级到伴随 DLL。
+            try
+            {
+                NativeBootstrap.Initialize();
+                _services.LocalLog.Write(LocalLogLevel.Info, "native", "native-libraries-ready");
+            }
+            catch (Exception ex)
+            {
+                _services.LocalLog.WriteException("native-bootstrap", ex);
+                if (!_smokeMode)
+                {
+                    MessageBox.Show(
+                        "Apage 无法初始化内置组件，应用将退出。\n可查看 data\\logs\\apage.log 获取诊断信息。",
+                        "Apage", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                StartupMetrics.Complete("native-bootstrap-failed", 1);
+                _services.Dispose();
+                _services = null;
+                Shutdown(1);
                 return;
             }
 
@@ -41,45 +83,159 @@ namespace Apage.Portable
             AppPaths.PortableCache = _services.Settings.Current.PortableCache;
             AppPaths.EnsureCreated();
 
-            // 内核生命周期门面：普通标签共享同一 Environment（Phase 2 多标签复用同一内核，省内存）
-            _lifecycle = BrowserTabView.CreateLifecycleService();
+            // 外观（quickWin）：点亮 Dark.xaml（此前是全仓零引用的死资源）。
+            // 画刷经 DynamicResource 引用主题色值，替换合并字典中的主题文件即整体换肤。
+            ApplyTheme(_services.Settings.Current.Theme);
 
-            var window = new MainWindow(_services, _lifecycle, LoadAdBlockRules());
+            // 冒烟/CI 不得触网：关掉引擎图标抓取，让新标签页走「无图标 → 字标」分支。
+            // 注意这只影响本次进程，不写回 settings.json。
+            if (_smokeMode)
+                _services.Settings.Current.FetchEngineIcons = false;
+
+            StartupMetrics.Mark("SettingsAndStatsReady");
+
+            // 按站点隐私覆盖（R5）：小文件同步读，与设置同路；损坏回落空表不阻断启动
+            _siteShields = new SiteShieldStore(AppPaths.DataDirectory);
+            try
+            {
+                _siteShields.LoadAsync().GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // 覆盖表读取失败不影响浏览：保持空表（全部站点走全局默认）
+            }
+
+            // 便携站点允许清单（R7）：{数据目录}\allowlist.txt 明文配置，缺失即空清单
+            _siteAllowList = new SiteAllowList(Path.Combine(AppPaths.DataDirectory, "allowlist.txt"));
+            _siteAllowList.Load();
+
+            // 内核命令行参数收口（R1）：stock 开关常驻 + WebRTC IP 防护按设置生效；
+            // 非 stock 开关不传（会被内核静默忽略，制造虚假安全感，见 BrowserArguments.ForbiddenSwitches）
+            var browserArgs = BrowserArguments.Build(_services.Settings.Current);
+            if (BrowserArguments.HasExternalOverride(Environment.GetCommandLineArgs()))
+            {
+                // --edge-webview-switches 优先级高于 AdditionalBrowserArguments（微软文档）：
+                // 外部注入会覆盖上面的收口配置，只记本地日志告警，不静默继续
+                _services.LocalLog.Write(
+                    LocalLogLevel.Warning, "browser-args",
+                    "external --edge-webview-switches detected; Apage browser arguments may be overridden");
+            }
+
+            // 内核生命周期门面：普通标签共享同一 Environment（Phase 2 多标签复用同一内核，省内存）
+            _lifecycle = BrowserTabView.CreateLifecycleService(browserArgs);
+            StartupMetrics.Mark("LifecycleReady");
+
+            // 新标签页资产落盘（§4.3）：空白标签的导航目标须在窗口创建前就绪
+            WebUiAssets.EnsureExtracted();
+            StartupMetrics.Mark("NtpAssetsReady");
+
+            // 标签依赖包（设置/统计/拦截/生命周期）经 MainWindow → TabManager → 各 BrowserTabView 下发
+            var tabContext = new BrowserTabContext
+            {
+                Settings = _services.Settings.Current,
+                Stats = _services.PrivacyStats,
+                Lifecycle = _lifecycle,
+                // 图标缓存只落盘 WebView2 已取回的 favicon，新标签页从本地读，不额外联网
+                Favicons = new FaviconStore(Path.Combine(AppPaths.DataDirectory, "favicons")),
+                // 按站点隐私覆盖（R5）：后台加载，未就绪前查询回落空表（全部站点走全局默认）
+                SiteShields = _siteShields,
+                // 便携站点允许清单（R7）：命中清单的站点同样关闭防护
+                SiteAllowList = _siteAllowList,
+            };
+            // 内置 PSL/规则与用户规则在窗口首帧后加载（MainWindow.InitializeTabsAsync），
+            // 避免 2MB+ 快照解析阻塞 ContentRendered。
+            StartupMetrics.Mark("PrivacyAssetsDeferred");
+
+            StartupMetrics.Mark("WindowConstructionStarting");
+            var window = new MainWindow(_services, tabContext);
+            StartupMetrics.Mark("WindowConstructed");
             MainWindow = window;
+            window.ContentRendered += (s, args) => StartupMetrics.Mark("ContentRendered");
+            StartupMetrics.Mark("WindowShowStarting");
             window.Show();
+            StartupMetrics.Mark("WindowShown");
+            window.InitializeTabs(); // 统计/会话/首个标签在首帧之后加载，不阻塞窗口可见
+
+            if (_smokeMode)
+                SmokeCheck.Start(this, window); // 看门狗接管：信号齐备/超时后 Shutdown 带退出码
         }
 
         /// <summary>
-        /// 加载本地广告拦截规则（§5.3）：只读 {数据目录}\adblock\*.txt，绝不联网下载列表（零后台请求红线）。
-        /// 目录不存在或无有效规则返回 null，下游据此完全不挂 WebResourceRequested 管道（无开销）。
-        /// 规则视为不可信输入，引擎内部已做长度上限与 100ms 正则超时防护。
+        /// 按设置应用外观（quickWin：点亮此前零引用的 Dark.xaml）。画刷经 DynamicResource
+        /// 引用主题色值，替换合并字典中的主题文件即整体换肤；设置保存后由 MainWindow 再次调用。
         /// </summary>
-        private static AdBlockRuleEngine? LoadAdBlockRules()
+        /// <param name="theme">system / light / dark；其余值按浅色处理。</param>
+        public static void ApplyTheme(string? theme)
+        {
+            var app = Application.Current;
+            if (app == null)
+                return;
+
+            var effective = theme;
+            if (string.Equals(effective, "system", StringComparison.OrdinalIgnoreCase))
+                effective = IsSystemDarkMode() ? "dark" : "light";
+            var dark = string.Equals(effective, "dark", StringComparison.OrdinalIgnoreCase);
+            var target = new Uri(dark ? "Themes/Dark.xaml" : "Themes/Light.xaml", UriKind.Relative);
+
+            var merged = app.Resources.MergedDictionaries;
+            for (int i = 0; i < merged.Count; i++)
+            {
+                var source = merged[i].Source?.ToString() ?? string.Empty;
+                if (source.EndsWith("Light.xaml", StringComparison.OrdinalIgnoreCase) ||
+                    source.EndsWith("Dark.xaml", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(source, target.ToString(), StringComparison.OrdinalIgnoreCase))
+                        merged[i] = new ResourceDictionary { Source = target };
+                    return;
+                }
+            }
+        }
+
+        // 系统深色模式（HKCU 个性化设置）；读取失败按浅色，与默认浅色一致
+        private static bool IsSystemDarkMode()
         {
             try
             {
-                var dir = Path.Combine(AppPaths.DataDirectory, "adblock");
-                if (!Directory.Exists(dir))
-                    return null;
-
-                var engine = new AdBlockRuleEngine();
-                foreach (var file in Directory.GetFiles(dir, "*.txt"))
-                    engine.AddRules(File.ReadLines(file));
-
-                return engine.BlockCount > 0 ? engine : null;
+                using var key = Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                return key?.GetValue("AppsUseLightTheme") is int value && value == 0;
             }
-            catch (Exception ex)
+            catch
             {
-                // 规则加载失败不阻断启动：无拦截运行
-                Trace.WriteLine($"[App] 广告拦截规则加载失败：{ex}");
-                return null;
+                return false;
             }
+        }
+
+        private void HookLocalDiagnostics(LocalLogService logs)
+        {
+            DispatcherUnhandledException += (s, e) =>
+                logs.WriteException("ui-unhandled", e.Exception);
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                if (e.ExceptionObject is Exception ex)
+                    logs.WriteException("appdomain-unhandled", ex);
+            };
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                logs.WriteException("task-unobserved", e.Exception);
+                e.SetObserved();
+            };
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
+            StartupMetrics.Complete("exited", e.ApplicationExitCode);
+            try
+            {
+                _services?.LocalLog.Write(
+                    LocalLogLevel.Info, "app", "exit-code=" + e.ApplicationExitCode);
+            }
+            catch
+            {
+                // 日志失败不得阻断退出
+            }
             _lifecycle?.Dispose();
-            _services?.Dispose(); // 释放单实例 Mutex
+            _services?.Dispose(); // 释放统计定时器与单实例 Mutex
             base.OnExit(e);
         }
     }

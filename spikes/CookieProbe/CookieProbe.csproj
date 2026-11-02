@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    独立 Spike：验证在 WebResourceRequested 中移除 Cookie 请求头，
+    能否阻止 WebView2 网络栈最终把 Cookie 发给服务器。
+    不加入 Apage.sln；构建：dotnet build spikes/CookieProbe/CookieProbe.csproj
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Apage.Spikes.CookieProbe</RootNamespace>
+    <AssemblyName>CookieProbe</AssemblyName>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+  </ItemGroup>
+
+</Project>

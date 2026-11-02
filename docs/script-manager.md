@@ -726,7 +726,7 @@ AvalonEdit 是 .NET 生态中最适合的轻量代码编辑器，不增加显著
 
 #### Phase 7a：运行时核心（1.5 周）
 
-> **最小内核（可提前至 v0.1）**：脚本导入 + ScriptMatcher URL 匹配 + 基础 GM_（getValue/setValue/addStyle）。条件成熟时前移，让首发即带可见的脚本能力（见 roadmap Phase 7）。
+> **最小内核（v0.1 后启动）**：先补 Spike 5，再做脚本导入 + ScriptMatcher URL 匹配 + 基础 GM_（getValue/setValue/addStyle）。为确保 v0.1 发布闭环，不再前移到首发（见 roadmap Phase 7 与 v0.1 发布收敛计划 S5）。
 
 - [ ] ScriptBridgeService 实现（WebMessage 桥接层）
 - [ ] ScriptMatcher URL 匹配引擎（@match + @include + @exclude）
@@ -755,6 +755,15 @@ AvalonEdit 是 .NET 生态中最适合的轻量代码编辑器，不增加显著
 - [ ] 脚本执行错误捕获与控制台输出
 
 **交付物**：GM_* API 全覆盖，安全模型完整
+
+#### Phase 7d：开发者工具（F12 DevTools + 反调试过滤）
+
+详见 [roadmap.md](roadmap.md) Phase 7d 与 [product-design.md](product-design.md) §5.8（v0.9 规划）。与脚本管线的接口约定：
+
+- 反调试 shim 与用户脚本共用 `AddScriptToExecuteOnDocumentCreated` 管线；
+- **注入顺序**：反调试 shim → 用户脚本（document-start）→ 页面脚本；shim 独立命名空间（IIFE 私有），不向页面暴露任何符号；
+- shim 仅处理动态代码（`eval` / `Function` 构造器中的 `debugger`），与 GM 注入不共享作用域、互不干扰；
+- 站点级 `FilterAntiDebug` 记忆与脚本 URL 匹配各自独立（站点键 eTLD+1，互不复用存储）。
 
 ---
 

@@ -37,7 +37,6 @@
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-
         <!-- 左滚动按钮：仅当标签溢出时可见（代码后置按滚动位置切换显隐/可用态） -->
         <Button x:Name="ScrollLeftButton" Grid.Column="0" Width="24" Height="28" Margin="4,0,0,0"
                 VerticalAlignment="Center" Visibility="Collapsed" ToolTip="向左滚动标签"
@@ -144,17 +143,18 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- 右滚动按钮：仅当标签溢出时可见 -->
-        <Button x:Name="ScrollRightButton" Grid.Column="2" Width="24" Height="28"
+        <!-- 右滚动按钮：仅当标签溢出时可见（排在「+」之后，保证「+」紧贴最后一个标签） -->
+        <Button x:Name="ScrollRightButton" Grid.Column="3" Width="24" Height="28"
                 VerticalAlignment="Center" Visibility="Collapsed" ToolTip="向右滚动标签"
                 Tag="{StaticResource Apage.Geo.Forward}"
                 Template="{StaticResource Apage.Template.TabScrollButton}"
                 Click="ScrollRightButton_Click"/>
 
-        <!-- 新建标签 +：固定最右，hover 旋转 90° 并变为强调色（100ms，只动 RenderTransform） -->
-        <Button x:Name="NewTabButton" Grid.Column="3" Width="28" Height="28"
-                VerticalAlignment="Center" Margin="4,0,8,0" ToolTip="新建标签"
-                Click="NewTabButton_Click">
+        <!-- 新建标签 +：默认紧跟在最后一个标签之后（夸克式），
+             标签溢出时改挂到独立列并固定在右侧；水平位置由代码后置计算。 -->
+        <Button x:Name="NewTabButton" Grid.Column="2" Width="28" Height="28"
+                HorizontalAlignment="Left" VerticalAlignment="Center" Margin="4,0,0,0"
+                Visibility="Collapsed" ToolTip="新建标签" Click="NewTabButton_Click">
             <Button.Template>
                 <ControlTemplate TargetType="Button">
                     <Grid WindowChrome.IsHitTestVisibleInChrome="True">

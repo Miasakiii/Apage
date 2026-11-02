@@ -12,7 +12,8 @@ namespace Apage.Core.Services;
 /// 由 Portable 层用 CoreWebView2Environment.CreateAsync 实现后以 object 形式回传。
 /// </summary>
 /// <param name="userDataFolder">Environment 的用户数据目录。</param>
-public delegate Task<object> WebView2EnvironmentFactory(string userDataFolder);
+/// <param name="additionalBrowserArguments">附加浏览器命令行参数（如 WebRTC IP 防护开关，§4.4；无则传 null）。</param>
+public delegate Task<object> WebView2EnvironmentFactory(string userDataFolder, string? additionalBrowserArguments);
 
 /// <summary>
 /// 浏览器内核生命周期：创建/持有共享 CoreWebView2Environment 的门面（§5.4）。
@@ -24,14 +25,21 @@ public sealed class BrowserLifecycleService : IDisposable
 {
     private readonly WebView2EnvironmentFactory _environmentFactory;
     private readonly SemaphoreSlim _environmentLock = new SemaphoreSlim(1, 1);
+    private readonly string? _additionalBrowserArguments;
 
     private object? _sharedEnvironment;
     private object? _privateEnvironment;
     private bool _disposed;
 
-    public BrowserLifecycleService(WebView2EnvironmentFactory environmentFactory)
+    /// <param name="environmentFactory">创建 Environment 的工厂（Portable 层实现）。</param>
+    /// <param name="additionalBrowserArguments">
+    /// 创建 Environment 时透传的附加命令行参数（如 <c>--force-webrtc-ip-handling-policy=disable_non_proxied_udp</c>，§4.4；
+    /// 普通 / 隐私环境同参数）。默认 null。
+    /// </param>
+    public BrowserLifecycleService(WebView2EnvironmentFactory environmentFactory, string? additionalBrowserArguments = null)
     {
         _environmentFactory = environmentFactory ?? throw new ArgumentNullException(nameof(environmentFactory));
+        _additionalBrowserArguments = additionalBrowserArguments;
     }
 
     /// <summary>普通标签共享 Environment 的 userDataFolder（随 R7 缓存策略走）。</summary>
@@ -53,7 +61,7 @@ public sealed class BrowserLifecycleService : IDisposable
             if (_sharedEnvironment == null)
             {
                 AppPaths.EnsureCreated();
-                _sharedEnvironment = await _environmentFactory(SharedUserDataFolder).ConfigureAwait(false);
+                _sharedEnvironment = await _environmentFactory(SharedUserDataFolder, _additionalBrowserArguments).ConfigureAwait(false);
             }
             return _sharedEnvironment;
         }
@@ -76,7 +84,7 @@ public sealed class BrowserLifecycleService : IDisposable
             if (_privateEnvironment == null)
             {
                 AppPaths.EnsureCreated();
-                _privateEnvironment = await _environmentFactory(PrivateUserDataFolder).ConfigureAwait(false);
+                _privateEnvironment = await _environmentFactory(PrivateUserDataFolder, _additionalBrowserArguments).ConfigureAwait(false);
             }
             return _privateEnvironment;
         }

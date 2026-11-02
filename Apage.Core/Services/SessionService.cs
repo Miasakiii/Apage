@@ -1,6 +1,5 @@
 #nullable enable
 using System;
-using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Apage.Core.Models;
@@ -9,7 +8,7 @@ namespace Apage.Core.Services;
 
 /// <summary>
 /// 会话持久化：把 <see cref="SessionState"/> 序列化到注入的文件路径（便携数据目录下的 session.json）。
-/// 与 SettingsService 一致的原子写（.tmp → 替换）；损坏/缺失一律回落空会话（宁可丢会话，不能启动失败）。
+/// 原子写统一交给 <see cref="AtomicJsonStore"/>；正式文件损坏时按 .bak/.tmp 尝试恢复。
 /// URL 可恢复过滤与索引收敛（<see cref="IsRestorableUrl"/> / <see cref="Normalize"/>）为纯逻辑，便于单测（决策 #18）。
 /// </summary>
 public sealed class SessionService
@@ -26,54 +25,25 @@ public sealed class SessionService
         _filePath = filePath;
     }
 
-    /// <summary>加载上次会话。文件缺失或 JSON 损坏均返回空会话（不抛异常，不写盘）。</summary>
-    public async Task<SessionState> LoadAsync()
+    /// <summary>加载上次会话。文件缺失或全部候选损坏均返回空会话（不抛异常，不写盘）。</summary>
+    public Task<SessionState> LoadAsync()
     {
-        try
+        if (AtomicJsonStore.TryReadJson<SessionState>(_filePath, JsonOptions, out var loaded) &&
+            loaded != null)
         {
-            if (File.Exists(_filePath))
-            {
-                var json = await Task.Run(() => File.ReadAllText(_filePath)).ConfigureAwait(false);
-                return JsonSerializer.Deserialize<SessionState>(json) ?? new SessionState();
-            }
+            return Task.FromResult(loaded);
         }
-        catch (Exception ex) when (ex is JsonException || ex is IOException || ex is UnauthorizedAccessException)
-        {
-            // 损坏/读取失败：宁可丢失会话，也不能启动失败
-        }
-        return new SessionState();
+        return Task.FromResult(new SessionState());
     }
 
-    /// <summary>保存会话（原子写：.tmp → 替换正式文件）。目录不存在时自动创建。</summary>
+    /// <summary>保存会话（原子写；失败时保留正式文件与 .bak，不先删除唯一副本）。</summary>
     public async Task SaveAsync(SessionState state)
     {
         if (state == null)
             throw new ArgumentNullException(nameof(state));
 
         var json = JsonSerializer.Serialize(state, JsonOptions);
-        var dir = Path.GetDirectoryName(_filePath);
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
-
-        var tmpPath = _filePath + ".tmp";
-        await Task.Run(() =>
-        {
-            File.WriteAllText(tmpPath, json);
-            try
-            {
-                if (File.Exists(_filePath))
-                    File.Replace(tmpPath, _filePath, null); // 原子替换
-                else
-                    File.Move(tmpPath, _filePath);
-            }
-            catch (Exception ex) when (ex is IOException || ex is PlatformNotSupportedException || ex is UnauthorizedAccessException)
-            {
-                // 部分文件系统（如 exFAT U 盘）不支持 ReplaceFile，降级为删除后移动
-                if (File.Exists(_filePath))
-                    File.Delete(_filePath);
-                File.Move(tmpPath, _filePath);
-            }
-        }).ConfigureAwait(false);
+        await AtomicJsonStore.SaveAsync(_filePath, json).ConfigureAwait(false);
     }
 
     /// <summary>URL 是否可恢复：仅 http/https/file；空白与 about:（新标签页等）一律不恢复。</summary>

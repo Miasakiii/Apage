@@ -90,11 +90,29 @@ public partial class MainWindow : Window
 
             StatusText.Text = "断言执行中…";
             var sw = Stopwatch.StartNew();
-            var json = await core.ExecuteScriptAsync("window.__runSpikeTests()");
+            // ExecuteScriptAsync 对 async 函数返回的 Promise 只做 JSON 编码（得到 {}），不 await——
+            // 2026-07-19 那次 FAIL 的根因（见 docs/spikes/results/webmessage.md）。
+            // 修法：经 __runSpikeTestsRecorded 把结果写入 window.__spikeResults，此处轮询后同步读回。
+            await core.ExecuteScriptAsync("window.__runSpikeTestsRecorded()");
+            const int pollTimeoutMs = 60_000;
+            var deadline = DateTime.UtcNow.AddMilliseconds(pollTimeoutMs);
+            while (true)
+            {
+                var done = await core.ExecuteScriptAsync("window.__spikeDone === true");
+                if (done == "true") break;
+                if (DateTime.UtcNow >= deadline)
+                    throw new TimeoutException($"断言未在 {pollTimeoutMs / 1000}s 内落定（window.__spikeDone 未置位）");
+                await Task.Delay(100);
+            }
+            var encoded = await core.ExecuteScriptAsync("window.__spikeResults");
             sw.Stop();
-            Log($"ExecuteScriptAsync(全量断言) 返回，耗时 {sw.ElapsedMilliseconds} ms");
+            Log($"断言执行完毕并读回，耗时 {sw.ElapsedMilliseconds} ms");
 
-            ReportResults(json);
+            // __spikeResults 本身是 JSON 字符串，ExecuteScriptAsync 又包一层 JSON 编码 → 先解外层
+            using var outer = JsonDocument.Parse(encoded);
+            ReportResults(outer.RootElement.ValueKind == JsonValueKind.String
+                ? outer.RootElement.GetString()!
+                : encoded);
         }
         catch (Exception ex)
         {

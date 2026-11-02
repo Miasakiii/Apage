@@ -1,6 +1,36 @@
 # Apage 产品设计文档
 
-> 内部文档 | 版本：v0.4 | 更新：2026-07-19
+> 内部文档 | 版本：v0.10 | 更新：2026-11-02
+>
+> v0.10 变更（P0/P1 硬化，2026-11-02）：
+> - Cookie 真机探针证伪事件级删除：WebView2 网络栈会重新附加 Cookie；第三方 Cookie 隔离、追踪计数与相关宣传从 v0.1 移除，旧字段默认 false
+> - 广告拦截区分顶层主文档与 iframe Document，第三方 iframe 不再绕过规则
+> - 下载按 id 串行、终态不可回退；单条取消不再全表标孤儿；会话恢复完成前关闭不覆盖 session
+> - 设置/会话/统计统一 `AtomicJsonStore`；规则更新保留用户规则、串行并逐跳校验 HTTPS
+>
+> v0.8 变更（D2：发布工程）：
+> - 正式产物版本元数据固定为 0.1.0.0 / 0.1.0-dev，不再输出 0.0.0.0
+> - `build\package.ps1` 串联许可校验、4.25MB/5MB 硬门禁、五信号 smoke、单文件启动基准、SHA-256、legal bundle 与 release manifest
+> - 当前产物 3,972,608 字节；首启 ContentRendered 882.6ms，热启中位 802.3ms（本机 1000ms 门槛通过）
+> - SignPath 申请与签名后复验手册已准备；产物仍未签名，签名执行属 S4
+>
+> v0.7 变更（A2：PSL + 离线规则快照）：
+> - 第三方 Cookie 判定从末两标签近似切换为随包 Public Suffix List（2026-10-28 版本，MPL-2.0）；通配/例外/IDN/尾点均有测试，失败回退末两标签
+> - 内置 EasyList/EasyPrivacy 兼容快照 94,646 条（CC BY-SA 3.0），筛选后跳过 38,432 条不可执行规则并记录原因；PSL/规则均校验 SHA-256 后加载
+> - 单文件产物增至 3,970,560 字节，仍低于 4.25MB 开发目标；smoke 扩展为应用/窗口/WebView2/SQLite/隐私资产五信号
+> - 运行时仍零规则/PSL 自动更新；A3 的「立即更新规则」尚未实现
+>
+> v0.6 变更（S2 第一批 D1/A1/B1/C1）：
+> - D1 正式单文件打包落地：1 文件 / 3,068,928 字节，真实 smoke 覆盖窗口、WebView2、SQLite 与设置窗口构造；尚未签名
+> - A1 收紧规则语义：无法完整求值的 `$` 修饰符规则整条拒收，不再宽泛拦截；追踪统计仅在 Cookie 实际存在并移除时增加，且改为短周期批量落盘
+> - B1 SQLite 安全基座落地：schema v1、事务迁移、迁移前备份、完整性检查、损坏不删库；设置/会话/统计继续 JSON
+> - C1 真实设置窗口与本地滚动诊断落地；日志默认脱敏 URL/Cookie，只手动导出
+>
+> v0.5 变更（v0.1 发布收敛基线）：
+> - S0 发布口径与共享契约已冻结；S1 独立单文件 spike 条件通过，2,950,144 字节 EXE 已验证 WPF/Core/WebView2/SQLite
+> - 生产 `Apage.Portable` 当前仍为多文件构建；Costura、原生依赖引导和正式体积门禁转入 S2-D，不能把 spike 结果写成生产已发布能力
+> - 真实应用热启动中位 900.3ms；首启存在阈值附近及更高波动，`<1s` 仅为参考环境下的窗口可见目标，最终签名单文件仍须复测
+> - v0.1 数据边界固定为新增书签/历史/下载使用 SQLite，设置/会话/周统计继续 JSON；用户脚本最小内核移至 v0.1 后
 >
 > v0.4 变更（回退双线路，单押便携版）：
 > - 双线路架构暂缓：Apage.Desktop 降级为「PMF 验证后可选项」，不再是 Phase 8 既定交付；v0.1~v1.0 单押便携版（Apage.Portable）
@@ -43,14 +73,15 @@
 
 | 特征 | 描述 |
 |------|------|
-| 极致轻量 | 单文件 EXE，<5MB，冷启动 <1秒（窗口可见） |
-| 隐私默认全开 | 广告拦截、追踪阻断、Cookie 控制，开箱即用 |
+| 极致轻量 | 发布目标：x64 单文件 EXE、签名后 <5MB、窗口可见 <1秒；B2/A3 产物 4,035,584 字节（未签名） |
+| 隐私默认全开 | DNT/GPC、WebRTC 防护与广告规则拦截默认启用；第三方 Cookie 隔离因 WebView2 无可验证入口，v0.1 不提供 |
 | 全本地化 | 零遥测、零后台请求、零数据收集（仅用户触发的网络请求，清单透明） |
 | 无需登录 | 不强制账号，不要求云同步 |
 | Portable | 数据跟程序走，U盘即插即用（前提：目标机已装 WebView2 Runtime，Win11 默认预装，见风险 R1） |
 | 功能完整 | 用户脚本（GM_* 兼容）、部分 MV3 扩展（侧载）、多标签、下载管理 |
 | 无广告 | 浏览器本身无任何广告、推广、"可接受广告"白名单 |
 | 壁纸美学 | 新标签页自定义静态壁纸 + 隐私拦截统计卡片 |
+| 开发者友好 | 完整 F12 调试控制台（WebView2 原生 DevTools）+ 反调试过滤一键开关 |
 
 ---
 
@@ -193,7 +224,7 @@
 
 **要求**：
 - 必须支持**用户脚本（Tampermonkey 兼容 GM_\* API）**——这是 Apage 的一级差异化能力
-- Chrome 扩展量力而行：WebView2 的扩展支持目前仅限 **MV3 子集 + 本地侧载**，API 覆盖不全，无商店直连。宣传口径为「支持部分 MV3 扩展」，不做全量承诺（实测验证见路线图 Phase 0）
+- Chrome 扩展量力而行：WebView2 的扩展支持为 **本地侧载**（须在 Environment 创建时显式开启 `AreBrowserExtensionsEnabled`，默认关闭；2026-10-26 实测最小 MV3/MV2 均可装），API 覆盖不全，无商店直连。宣传口径为「支持本地侧载扩展」，不做全量承诺（实测见 [spikes/results/extension.md](spikes/results/extension.md) 与路线图 Phase 0）
 
 ### 痛点 6：没有差异化记忆点
 
@@ -201,9 +232,11 @@
 
 - 星愿的差异化太窄（主页+漫画），Vivaldi 的太复杂（什么都能定制）
 
-**Apage 的标签**：壁纸美学 + 隐私统计 + Portable 即插即用
+**Apage 的标签**：壁纸美学 + 隐私盾拦截计数 + Portable 即插即用
 
-> 注：单纯的壁纸容易被复制。更强的记忆点是新标签页上的**隐私拦截统计**（"本周已拦截 N 条追踪 / M 个广告"）——Brave 靠这个小卡片建立了极强的用户感知，且数据全本地，与零联网原则不冲突。壁纸负责美，拦截统计负责价值感。
+> 注：单纯的壁纸容易被复制。更强的记忆点是**可验证的隐私拦截统计**——Brave 靠这类计数建立了极强的用户感知，且数据全本地，与零联网原则不冲突。壁纸负责美，可验证的拦截计数负责价值感；无法验证的“追踪数”不纳入。
+>
+> 口径更正（2026-11-02）：该计数原计划放新标签页统计卡，因首屏复杂度与证据口径收敛，**统计卡已下线**（决策 #25）；计数入口收敛到隐私盾面板「本周拦截（本机统计）」，数据与落盘机制不变。
 
 ---
 
@@ -219,11 +252,11 @@
 | 运行时分发 | 框架依赖（系统自带） | 保 <5MB 单文件；真正的运行时依赖是 WebView2 Runtime（见 R1），非 .NET |
 | 共享层 | Apage.Core（.NET Standard 2.0） | Services/ViewModels/Models 分层，纯逻辑可单测；为未来桌面版衍生预留 |
 | UI | WPF（.NET Framework 4.8） | 比 WinUI 3 更成熟，XAML 灵活 |
-| MVVM | CommunityToolkit.Mvvm | 轻量、源生成器、ZZZ 验证 |
+| UI 组织 | 当前 WPF code-behind；MVVM 分层为预留（当前未引入 MVVM 包） | 避免首发前大范围重写，纯逻辑继续沉淀 Core |
 | 引擎 | WebView2 | 系统自带 Chromium（常青版），零体积 |
 | 通信 | WebMessage（chrome.webview.postMessage） | WebView2 原生异步通道，无端口、无鉴权问题 |
-| 存储 | SQLite（Microsoft.Data.Sqlite） | 单文件、查询高效、portable 友好 |
-| 打包 | PublishSingleFile（框架依赖） | 原生单 EXE |
+| 存储 | 设置/会话/周统计 JSON；SQLite schema v1 与安全基础已就绪，书签/历史/下载待 B2 | 小状态原子写足够；结构化数据走事务与查询 |
+| 打包 | 生产单文件：Costura + NativeBootstrap，`build\package.ps1` 当前产出 3,972,608 字节 / 版本 0.1.0.0 | .NET FX 4.8 不支持 PublishSingleFile；已准备 SignPath 签名后复验，实际签名属 S4 |
 | JSON | System.Text.Json | 高性能 |
 
 > **共享层语言版本**：Apage.Core 目标框架为 .NET Standard 2.0（保证未来桌面版 .NET 8 与便携版 .NET FX 4.8 都能引用）。**LangVersion 放开为 `latest`**——.NET Standard 2.0 目标框架仍可使用 C# 8+ 的多数语法糖（`switch` 表达式、`using` 声明、模式匹配等，编译器负责降级）；`record`/`init` 仅需补一个 `IsExternalInit` polyfill；只需避免依赖运行时的新 API。此前 v0.3 锁定 `7.3` 导致 §4.4、script-manager §3.2 示例的 `switch` 表达式自相矛盾，v0.4 已修正。
@@ -345,6 +378,8 @@ public sealed class AppServices : IDisposable
 }
 ```
 
+> **现状标注（2026-11-02）**：§4.2/§4.3 为「目标结构」，部分未建立：ViewModels/ 仅 Placeholder.cs；ScriptManager 运行时（ScriptManagerService / ScriptBridgeService / ScriptStorage / ScriptHttpClient）、Apage.Watchdog、Apage.Desktop 尚未创建；实际 AppServices 属性为 Settings / Session / PrivacyStats / SingleInstance / LocalLog / Database / Bookmarks / History / Downloads / PrivacyDirectory，广告拦截经 AdBlockRuleProvider + RuleUpdateService 提供（命名映射：AdBlockManager→AdBlockRuleProvider+RuleUpdateService、PrivacyService→PrivacyStatsService+ThirdPartyDetector+PrivacyAssets、FaviconCacheService→FaviconStore、SearchSuggestionService→OmniboxSuggestionService、Configuration/Settings.cs→Models/AppSettings.cs）。
+
 ### 4.4 WebMessage 通信（替代 HostObject，不采用 WebSocket）
 
 ```
@@ -397,8 +432,8 @@ WebMessage 通道只存在于我们自己的 WebView2 进程内：无 TCP 端口
 
 | 指标 | 便携版目标（主力） | 参考值 | 备注 |
 |------|------------------|--------|------|
-| 安装包体积 | <5MB（Phase 0 实测预算，见 R12） | ZZZ ~5MB | 框架依赖单文件；e_sqlite3.dll + 规则快照 + PSL 叠加需实测称重，超支则调口径 |
-| 冷启动时间 | <1秒（窗口可见） | Min 0.8秒 | UI 先行 + WebView2 后台预热 |
+| 安装包体积 | 签名后 <5MB（见 R12） | ZZZ ~5MB | D2 未签名产物 3,972,608 字节；4.25MB 目标余量 277,392（6.5%） |
+| 冷启动时间 | <1秒（窗口可见） | Min 0.8秒 | D2 本机首启 882.6ms、热启中位 802.3ms；CI 用 1500ms 非参考门禁，发布须复测 |
 | 空白标签内存 | <50MB | Min 45MB | 共享 Environment |
 | 10 标签内存 | <300MB | Min ~250MB | **隐私标签共享一个隔离 Environment**，否则每标签一套浏览器进程（3+ 进程），目标无法达成 |
 | 广告规则容量 | 50万条 | ZZZ 已验证 | Phase 0 benchmark 复核 |
@@ -425,8 +460,6 @@ WebMessage 通道只存在于我们自己的 WebView2 进程内：无 TCP 端口
 │    │Google│ │GitHub│ │ B站  │ │ 知乎 │ │ +  │ │
 │    └──────┘ └──────┘ └──────┘ └──────┘ └────┘ │
 │                                                 │
-│         🛡 本周已拦截 1,283 条追踪 · 342 个广告    │
-│                                                 │
 │                    14:32                        │
 │                  星期六                          │
 │               2026年7月19日                      │
@@ -437,7 +470,7 @@ WebMessage 通道只存在于我们自己的 WebView2 进程内：无 TCP 端口
 - 壁纸：本地图片 / 拖拽设置 / 内置精选
 - 毛玻璃搜索框（backdrop-filter: blur）
 - 快捷方式可编辑/排序/删除
-- **隐私统计卡片（v0.1 首发差异化）**：本周拦截追踪/广告计数（纯本地数据，强化隐私心智；最便宜、感知最强的差异化，确保随 v0.1 首发）
+- **隐私盾本周拦截计数**：广告规则拦截次数按周统计（纯本地数据，强化隐私心智；不展示无法验证的追踪数）。入口在隐私盾面板——新标签页统计卡已于 2026-11-02 下线（决策 #25）
 - 时钟 + 日期
 
 ### 5.2 隐私保护
@@ -447,12 +480,11 @@ WebMessage 通道只存在于我们自己的 WebView2 进程内：无 TCP 端口
 ```csharp
 public class PrivacyDefaults
 {
-    public bool BlockThirdPartyCookies = true;       // 默认开
+    public bool BlockThirdPartyCookies = false;      // 旧字段：事件级删除已被真机证伪，默认关且无 UI
     public bool SendDoNotTrack = true;               // 默认开（声明性，多数站点忽略）
     public bool SendGlobalPrivacyControl = true;     // 默认开（部分法域有法律效力）
     public bool WebRTCIPProtection = true;           // 默认开：防 IP 泄露，不断连（见下）
-    public bool ClearOnExit = false;                 // 可选
-    public bool AutoDeleteCookies = false;           // 可选
+    public bool ClearOnExit = false;                 // 可选（清理编排见隐私数据清理，未实现前不展示为可用设置）
     public bool OnlineSearchSuggestions = false;     // 默认关：联网建议会把击键发给引擎
 }
 ```
@@ -467,18 +499,58 @@ public class PrivacyDefaults
 
 原则：不设"可接受广告"白名单。用户自定义规则优先级最高。
 
+> **实现现状（A2，2026-10-29）**：v0.1 随包快照当前只含 **EasyList + EasyPrivacy** 中引擎可正确执行的网络规则（94,646 条），EasyList China 等列表可在后续版本追加。快照记录来源 URL、抓取时间、上游 SHA-256、接受/跳过原因与许可；过滤快照按 CC BY-SA 3.0 分发，PSL 按 MPL-2.0。运行时加载前校验 SHA-256，不自动联网更新；「立即更新规则」属 A3。
+
 **更新机制**（与"零后台请求"原则对齐）：
 
 1. 安装包内置一份规则快照，保证开箱即用；
-2. 设置页提供「立即更新规则」按钮（用户触发的网络请求）；
-3. 「启动时自动更新」为可选开关，**默认关闭**，开启时明确提示会产生后台请求；
-4. 关于页列出程序可能发起的全部网络请求清单，透明可审计，包括：规则更新（用户触发）、用户主动联网搜索建议（默认关）、**favicon 抓取**（浏览时按需请求站点图标，属浏览衍生请求而非后台静默——需在清单中诚实列出并提供关闭开关）。
+2. 设置页提供「立即更新规则」按钮（用户触发的网络请求）；**没有启动时/定时/静默自动更新**，未点击时规则子系统零联网；
+3. 网络请求清单（透明可审计，已实现两条）：规则更新（用户点击触发，HTTPS）、**搜索引擎图标一次性抓取**（默认开，可在设置关闭；仅对白名单内的四个引擎各抓一次 favicon.ico）。清单由本文档与 README 承载——「关于」页尚未实现，不谎称已有；联网搜索建议为规划项（默认关、当前无消费方）。
 
-#### 三方 Cookie 控制（诚实版）
+> **站点图标口径（2026-11-02 实现）**：图标有两条来源，都不经过任何第三方图标服务。
+>
+> **来源一（零请求）**：用户访问站点时，内核本来就会取回 favicon，宿主用 `GetFaviconAsync` 把同一份字节落盘到 `{数据目录}\favicons`，新标签页从本地读。
+>
+> **来源二（一次性、受控）**：为了让首屏四个引擎图标开箱可用，新标签页会请求 `https://<引擎主机>/favicon.ico` 各一次。边界：仅限百度 / 必应 / Google / DuckDuckGo 的主机别名（`SearchEngineHosts` 白名单，页面无法指定任意主机）；仅当本地无缓存时触发；仅 HTTPS、不跟随重定向、6 秒超时、单次 ≤64KB、只接受图片魔数；每个主机每会话最多尝试一次；命中后落缓存不再请求；失败仅在本次会话内不重试、不落盘，重启后会再次尝试一次。设置里「获取搜索引擎图标」可关闭，关闭后完全不发请求。
+>
+> 因此：
+> - **不新增任何请求**：不请求 `favicon.ico`、不调用第三方图标服务、不做远程代理；
+> - **用户快捷方式仍不抓取**：只有引擎主机走来源二，用户自己添加的站点一律靠访问获取，没有图标时回落为品牌色字标；
+> - 抓取结果统一重编码为 32px PNG 再入库，避免超大原图与格式不一致；缓存上限 256 条，按最后写入时间裁剪；目录损坏或不可写只影响图标显示，不影响浏览。
 
-- 请求时按 Public Suffix List 判断域名归属，剥离第三方请求的 `Cookie` 头；
-- 响应侧同步剥离 `Set-Cookie`（需重写响应，有成本，按开关启用）；
-- **已知残余泄露面**（文档公开，不粉饰）：第三方脚本的 `document.cookie`、IndexedDB/localStorage 等存储类追踪不在头部手术覆盖范围内，依赖 Chromium 存储分区与 Profile 首选项缓解。优先使用 Chromium 内建能力，头部手术作为补充。
+#### 能力边界声明（2026-11-02，唯一事实源）
+
+Apage 的隐私叙事明确止步于「网络层拦截 + 头部信号 + WebRTC IP 防护」。以下边界必须如实披露，任何新功能不得超出：
+
+| 边界 | 事实 |
+|---|---|
+| Apage 自身 | 零遥测、零后台请求；仅两条用户触发出站路径（规则更新、引擎图标抓取），由 `build\check-redlines.ps1` 文件级白名单 + `build\outbound-probe.ps1` 首启零非白名单出站门禁双重锁死 |
+| WebView2 Runtime | 微软文档明确其「无论 Windows 诊断数据设置如何」都会收集性能/可靠性所需数据，宿主仅能控制 SmartScreen 与自定义崩溃报告——**不受 Apage 控制**，本行即披露义务 |
+| 指纹防护 | 不提供。WebGL/Canvas/WebAudio/WebGPU 参数在 WebView2 壳层不可干预，不做「Brave 级指纹防护」表述 |
+| 恶意软件黑名单 | 不提供。ABP 引擎只做广告/跟踪规则拦截；SmartScreen 信誉检查经 R1 内核参数（`--disable-features=msSmartScreenProtection`）**默认关闭**——SmartScreen 会把不在本地流行名单中的导航 URL 整址发送微软，关闭与「URL 不外传」定位一致，但失去内核级钓鱼/恶意提示；API 层反选开关（R12）待决策，不做双重控制 |
+| 拦截能力边界 | ABP 子串索引可执行的网络规则子集；含 `$` 修饰符条件规则 fail-closed 拒收；化妆规则（`##`）后置 Phase 7+ |
+
+新增任何隐私相关能力必须同步更新本表（AGENTS.md 红线 4 披露义务）。
+
+#### 按站点防护覆盖与便携允许清单（R5/R7）
+
+两条「误伤治理」通道，语义相同（命中即跳过拦截与计数；DNT/GPC 声明性头仍发送）：
+
+1. **按站点覆盖**（`{数据目录}\site-shields.json`，设置窗口「按站点防护」管理）：用户为被误伤的站点单独关闭防护。硬约束：站点级关闭绝不回写全局默认值（单测把守），该结构不进日志导出。
+2. **便携允许清单**（`{数据目录}\allowlist.txt`，用户可见可编辑的明文）：企内网、离线机、被反拦截墙阻断的环境里随分发预置一批关闭防护的站点，比逐站点点开关实用。格式：每行一个主机，支持 `*.example.com` 通配子域与 `.example.com` 点前缀、`#` 注释；文件缺失或损坏回落空清单，不阻断浏览。这是可审计的明文配置，不是隐藏后门；清单内容不进日志导出。
+
+诚实口径：引擎当前不区分广告/跟踪规则（单一 `IsBlocked`），两条通道均只提供整轴「彻底关闭」；按广告/跟踪分轴需要规则来源分类，属后续工作。
+
+#### 第三方 Cookie 隔离（v0.1 不提供，已纠偏）
+
+原设计计划在 `WebResourceRequested` 中按 PSL 判断第三方并删除 `Cookie` 请求头。**2026-11-02 真机探针证伪**：事件内能读到并删除 Cookie，但 WebView2 网络栈随后会重新附加，服务器仍收到同一 Cookie。
+
+- 证据：[cookie-privacy.md](spikes/results/cookie-privacy.md)（基线/删除两轮，Runtime 156.0.4314.58）；官方时序亦说明事件后可继续附加 Cookie/Authorization。
+- 产品处理：`BlockThirdPartyCookies` 保留为旧 JSON 兼容字段且默认 `false`；设置、请求管线、隐私统计、NTP 与隐私盾全部移除该能力，不作超额宣传。
+- WebView2 Tracking Prevention 仍为默认 Balanced（按已知追踪器名单工作），不等价于“第三方 Cookie 全阻断”，因此不以此替代承诺。
+- PSL 仍随包保留，供未来受支持平台能力或规则来源分析使用；当前不产生“已剥离 Cookie”的运行时声明。
+- **隐私盾拦截计数口径**（隐私盾面板「本周拦截（本机统计）」）：广告数 = 规则拦截次数，按周统计（周一 00:00 本地时间边界），正常退出时原子写 `{数据目录}\privacy-stats.json`；追踪数已随无效能力移除。
+- 决策与实现细节见 [P0/P1 硬化记录](design/2026-11-02-p0-p1-hardening.md)。
 
 #### 追踪保护头
 
@@ -497,7 +569,7 @@ var options = new CoreWebView2EnvironmentOptions {
 };
 ```
 
-阻止本地/公网 IP 经 WebRTC 泄露，同时保留音视频通话能力；设置中提供按站点开关。
+阻止本地/公网 IP 经 WebRTC 泄露，同时保留音视频通话能力；当前仅全局开关，按站点开关尚未实现（roadmap Phase 7+）。
 
 #### 地理位置模拟
 
@@ -563,7 +635,7 @@ var options = new CoreWebView2EnvironmentOptions {
 
 #### 事件管道
 
-每个 WebView2 实例注册完整事件链：广告拦截、DNT/GPC 头注入、Cookie 剥离、历史记录、暗黑模式、下载管理等。
+每个 WebView2 实例注册完整事件链：广告拦截（含第三方 iframe 文档）、DNT/GPC 头注入、历史记录、暗黑模式、下载管理等。
 
 #### 关闭流程
 
@@ -585,11 +657,15 @@ var options = new CoreWebView2EnvironmentOptions {
 | 书签导入 | Chrome/Edge HTML 导入（换浏览器的第一道门槛） | Phase 3 |
 | 页内查找 | Ctrl+F（WebView2 不自带 UI，需自绘） | Phase 6 |
 | 地址栏补全 | 本地历史 + 书签匹配 | Phase 3 |
+| 地址栏 bangs | `!触发词 查询` 本地展开为目标站点搜索 URL（如 `!gh wpf`、`!bd 关键词`），纯本地零联网 | v0.1 后 |
 | 崩溃日志 | 本地记录 + 用户手动导出（零遥测的代价是不能当瞎子） | Phase 6 |
 | 设为默认浏览器 | http/https 协议关联 | Phase 7+ |
 | 多窗口策略 | v0.1 单窗口多标签，多窗口后置 | Phase 7+ |
 | DPI 适配 | PerMonitorV2 清单，4K 屏文字清晰 | Phase 1 |
 | 代码签名 | 未签名 EXE 必触发 SmartScreen；开源可申请 SignPath.io 免费签名 | Phase 6 |
+| F12 开发者工具 | 完整 DevTools + 反调试过滤开关（详见 §5.8） | Phase 7d |
+
+> **bangs 边界口径（2026-11-02 决策）**：内置 curated 表（数十条，覆盖常用引擎/社区/工具/中文站点）随编译期分发；四条边界——① 本地静态表，无远程更新（同决策 #12）；② 纯字符串模板展开，无动态 URL 生成；③ 解析结果经地址栏由用户回车导航，与直接输入网址无异（红线 4 管应用自发请求，不管用户主动导航，故站点直达型 `!gh`/`!w`/`!yt` 不受引擎白名单约束——原方案的白名单约束会扼杀该能力，已否决）；④ 不进 ABP 规则快照，不污染规则许可与体积账本。空查询回落普通搜索（不抢导航）。
 
 ### 5.7 网页翻译（后期）
 
@@ -597,6 +673,37 @@ var options = new CoreWebView2EnvironmentOptions {
 - DOM 就地翻译（TreeWalker 收集文本节点）
 - 批量翻译（每批 40 条，最多 12000 字符）
 - 完美恢复原文
+
+### 5.8 开发者工具（F12 调试控制台 + 反调试过滤）
+
+> 规划随 [roadmap.md](roadmap.md) Phase 7d 落地（v0.9）。目标用户含开发者（见「一、产品定位」），F12 是刚需；反调试过滤是 WebView2 壳层能提供的差异化开发体验。
+
+#### F12 调试控制台（DevTools）
+
+- **形态**：WebView2 原生完整 Chromium DevTools（与 Edge 同源：Elements / Console / Sources / Network / Performance / Application …），**独立窗口**承载——WebView2 无「停靠面板」API，独立窗口即最终形态，不承诺停靠（R15）。
+- **入口**：内核内置 F12 / Ctrl+Shift+I / 右键「Inspect」开箱即用（`AreDevToolsEnabled` 默认 true）；外壳补工具栏「开发者」菜单（程序化 `OpenDevToolsWindow()`）与设置面板开关。
+- **生命周期**：每个标签一个 DevTools 窗口，标签关闭随内核销毁自动关闭；重复打开是官方 no-op（记录已开状态，避免无谓调用）；聚焦已有窗口需 Win32 窗口探测（脆弱，列为探索项，R15）。
+- **开关**：`AppSettings.EnableDevTools`（默认 true，贴合开发者）；关闭后 `AreDevToolsEnabled=false`，F12/菜单入口一并失效。
+- **版本兼容**：程序化打开统一用官方文档确认的无参 `OpenDevToolsWindow()`，不依赖带参重载，避免旧 SDK/Runtime 编译或运行失败。
+
+#### 反调试过滤（Anti-Anti-Debug）
+
+页面常用反调试手段干扰调试，常见三类与应对：
+
+| 手段 | 原理 | Apage 应对 |
+|------|------|-----------|
+| `debugger;` 刷屏 | 循环/定时器反复执行 `debugger;`，DevTools 打开即不断暂停 | **动态代码中和**：document-start shim 包裹 `Function` 构造器与 `eval`，剥离代码字符串中的 `debugger` 关键字；定时器回调 `toString()` 重建剥离列为探索项（有闭包破坏风险）；**静态脚本内的字面 `debugger;` 无法改写**（已解析字节），如实标注，依赖 DevTools「Deactivate breakpoints」习惯 |
+| DevTools 探测 | debugger 计时差、窗口尺寸差、`toString` 自检 | 计时探测随 `debugger` 中和自然失效；独立窗口形态天然免疫窗口尺寸差；shim 保留原生 `toString` 形貌防自检 |
+| console 刷屏 | 海量日志淹没真实输出 | 控制台过滤：按级别/正则过滤、重复折叠、防刷屏（DevTools Console 自带级别过滤为基线） |
+
+- **开关**：`AppSettings.FilterAntiDebug`（**默认关**）+ 站点级记忆 + 工具栏一键开关。默认关：注入会改页面行为、可能误伤正常站点，也避免滑向「破解工具」。
+- **注入方式**：与用户脚本共用 `AddScriptToExecuteOnDocumentCreated` 管线，注入顺序**前置**（先于用户脚本与页面脚本），独立命名空间不向页面暴露（script-manager §10 集成）。
+- **产品红线（决策 #21）**：仅做「让开发者能调试自己页面/正当页面」的辅助，**不提供**绕过登录、DRM、内容付费校验、验证码等破解能力；反调试过滤不进「默认全开」集合，与隐私统计/广告拦截定位不同。
+
+#### 与既有系统的关系
+
+- 复用 WebMessage 通道：宿主侧能力（拦截统计、网络管道数据）如需推给调试面板，走 `chrome.webview` 通道，零额外端口。
+- 快捷键：F12/Ctrl+Shift+I 由内核内置处理；外壳侧快捷键（若补）经 KeyboardService 统一注册，与 F11 全屏、Ctrl+F 查找协调，页内输入焦点不冲突。
 
 ---
 
@@ -625,7 +732,7 @@ var options = new CoreWebView2EnvironmentOptions {
 | 卖点 | 便携版（主力） | 桌面版（暂缓，未来可选） | 竞品对比 |
 |------|--------------|----------------------|---------|
 | 单文件体积 | <5MB | ~50MB | 便携版与 ZZZ 同级，Helium 的 1/20 |
-| 壁纸 + 隐私统计新标签页 | ✓（v0.1 首发） | ✓ | 无竞品做好 |
+| 壁纸新标签页 + 隐私盾拦截计数 | ✓ | ✓ | 无竞品做好 |
 | Portable 即插即用 | ✓（.NET FX 4.8 系统自带，前提装 WebView2 Runtime） | — | 便携版与 ZZZ 同级 |
 | 隐私默认全开 | ✓ | ✓ | Helium 同级 |
 | 无偏见广告拦截 | ✓ | ✓ | Brave 有白名单 |
@@ -645,17 +752,19 @@ var options = new CoreWebView2EnvironmentOptions {
 |---|------|------|------|---------|
 | R1 | **WebView2 Runtime 缺失**（LTSC/企业精简版/老 Win10）——头号现实风险 | 无法启动 | **诚实标注前提**：README/关于页明确"即插即用依赖目标机已装 WebView2 Runtime（Win11 默认预装，Win10 需 Edge 保持更新）"；启动时检测缺失并给出手动下载指引，**不做静默联网下载**（违背零网络）；不打包 Fixed Version（~180MB 摧毁 <5MB） | Phase 1 |
 | R2 | 双线路维护成本 vs 个人项目产能 | 双 CI/CD、双测试拖垮迭代 | **v0.4 决策：暂缓双线路，单押便携版**。便携版借 .NET FX 4.8 系统自带实现真即插即用（.NET 运行时非瓶颈，见 R1）。Apage.Core 保留分层但解除 C# 7.3 死锁（LangVersion=latest）。桌面版降级为 PMF 验证后可选项（Phase 8），非既定交付 | v0.1 发布后复盘 |
-| R3 | WebView2 扩展 API 覆盖不足 | "支持 Chrome 扩展"承诺落空 | 宣传口径降为「部分 MV3 扩展（侧载）」；用户脚本作为一级能力 | Phase 0 Spike 3 |
+| R3 | WebView2 扩展 API 覆盖不足 | "支持 Chrome 扩展"承诺落空 | 宣传口径为「本地侧载扩展」（须显式开启 `AreBrowserExtensionsEnabled`；MV3/MV2 均实测可装，2026-10-26 Spike 3，见 [spikes/results/extension.md](spikes/results/extension.md)）；用户脚本作为一级能力 | Phase 0 Spike 3（已实测） |
 | R4 | 50 万条规则下拦截性能不达标 | 核心卖点受损 | 子串索引 + MatchTimeout；benchmark 不达标则裁剪默认规则集 | Phase 0 Spike 1 |
-| R5 | 冷启动 <1s 达不到 | 核心卖点受损 | UI 先行 + WebView2 后台预热 + ReadyToRun；验收口径为「窗口可见 <1s」 | Phase 0 Spike 2 |
+| R5 | 冷启动 <1s 达不到 | 核心卖点受损 | UI 先行 + WebView2 后台预热；验收口径为「窗口可见 <1s」。真实应用热启动中位 900.3ms，首启存在波动，不作全环境承诺 | Phase 0 Spike 2（已实测；S4 复测） |
 | R6 | U盘热拔出 / exFAT 上 SQLite 损坏 | 用户数据丢失 | `journal_mode=DELETE` + `synchronous=FULL` + 启动 `PRAGMA integrity_check` + 自动备份上一版本 | Phase 3 |
 | R7 | WebView2 缓存海量小文件写入伤 U盘、拖慢速度 | 便携体验差 | 缓存位置可配置：默认宿主机 `%TEMP%`（数据仍便携），纯便携模式可选；只读 U盘 场景降级运行 | Phase 1 |
 | R8 | 规则列表供应链攻击（ReDoS/恶意规则） | 浏览器卡死 | 见 5.3 供应链安全 | Phase 5 |
 | R9 | 未签名 EXE 触发 SmartScreen 拦截 | 新用户被劝退 | 开源项目申请 SignPath.io 免费签名 | Phase 6 |
 | R10 | 零遥测 = 对线上问题失明 | 无法定位崩溃 | 本地崩溃日志 + 用户手动导出 | Phase 6 |
-| R11 | 捆绑第三方资源的许可（EasyList 系、public_suffix_list.dat 为 MPL） | 合规风险 | 规则以运行时下载为主、内置快照附许可文本；附录注明来源与许可 | Phase 5 |
-| R12 | 体积预算超支（e_sqlite3.dll ~1.5MB + 规则快照 + public_suffix_list.dat 叠加逼近/突破 <5MB） | 核心卖点/营销数字兑现不了 | Phase 0 新增「体积预算表」spike，逐依赖称重；超支则裁剪默认规则集、或把口径基于实测调整（宁可发布前调口径，不被用户拿体积打脸） | Phase 0 |
+| R11 | 捆绑第三方资源的许可（EasyList 系、public_suffix_list.dat 为 MPL） | 合规风险 | **A2 已闭环**：PSL MPL-2.0；EasyList/EasyPrivacy 过滤快照选择 CC BY-SA 3.0；许可全文、归属和来源哈希随包，`licenses/THIRD-PARTY-NOTICES.txt` 可审计 | A2（完成） |
+| R12 | 体积预算超支（e_sqlite3.dll ~1.5MB + 规则快照 + public_suffix_list.dat 叠加逼近/突破 <5MB） | 核心卖点/营销数字兑现不了 | **B2/A3 实测 4,035,584 字节**：4.25MB 目标余 214,416（5.0%）、5MB 硬门禁余 964,416（19.3%）；`package.ps1` 已硬性拦截超限 | B2/A3（完成）；S4 复测 |
 | R13 | 便携版单实例语义误判（全局 Mutex 导致同 U盘插不同机器/一机多副本冲突） | 便携体验受损 | SingleInstanceService 按**数据目录**（而非按机器）判定实例，Mutex 名含数据目录哈希 | Phase 3 |
+| R14 | 反调试过滤误伤正常站点 / 被当成「破解工具」 | 站点行为异常、产品口碑受损 | **默认关** + 站点级记忆 + 一键开关；仅动态代码中和，不做 JS 响应改写等重武器；明确产品红线（决策 #21）：仅调试辅助，不提供绕过登录/DRM/付费校验 | Phase 7d |
+| R15 | WebView2 DevTools API 限制（独立窗口无停靠、`OpenDevToolsWindow` 已开即 no-op、无法编程聚焦/枚举、.NET API 仅无参重载） | F12 体验不如 Chrome 停靠面板 | 诚实口径：独立窗口即最终形态，不承诺停靠；每标签记录已开状态；聚焦已有窗口列为探索项；程序化打开统一无参调用 | Phase 7d |
 
 ---
 
@@ -669,5 +778,7 @@ var options = new CoreWebView2EnvironmentOptions {
 | WebView2 文档 | https://learn.microsoft.com/en-us/microsoft-edge/webview2/ |
 | WebView2 扩展支持 | https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/extensions |
 | ABP 规则语法 | https://adblockplus.org/filter-cheatsheet |
-| Public Suffix List | https://publicsuffix.org/ （MPL 许可） |
+| Public Suffix List | https://publicsuffix.org/ （MPL-2.0） |
+| EasyList / EasyPrivacy | https://easylist.to/ （过滤快照按 CC BY-SA 3.0 分发，上游另可选 GPL-3.0+） |
 | SignPath.io（开源签名） | https://signpath.io/ |
+| WebView2 DevTools 调试 | https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/debug-devtools |

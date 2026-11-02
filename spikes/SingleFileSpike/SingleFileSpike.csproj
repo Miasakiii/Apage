@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Apage.Spikes.SingleFile</RootNamespace>
+    <AssemblyName>SingleFileSpike</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <Deterministic>true</Deterministic>
+    <UseCostura Condition="'$(UseCostura)' == ''">true</UseCostura>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Costura 只合并托管依赖。原生库由 NativeBootstrap 释放到哈希隔离缓存后显式加载，
+         避免单文件下 provider 依赖 Assembly.Location 而失败。 -->
+    <EmbeddedResource Include="$(NuGetPackageRoot)microsoft.web.webview2\1.0.4078.44\runtimes\win-x64\native\WebView2Loader.dll">
+      <LogicalName>Apage.Native.win-x64.WebView2Loader.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="$(NuGetPackageRoot)sqlitepclraw.lib.e_sqlite3\3.50.3\runtimes\win-x64\native\e_sqlite3.dll">
+      <LogicalName>Apage.Native.win-x64.e_sqlite3.dll</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Apage.Core\Apage.Core.csproj" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+    <!-- 不用 bundle_e_sqlite3：其 Batteries_V2.Init 会选 dynamic_cdecl provider，
+         而 Costura 合入后 provider 程序集 Location 为空，原生库路径解析必然失败。 -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.10" />
+    <PackageReference Include="SQLitePCLRaw.provider.e_sqlite3" Version="2.1.11" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
+    <PackageReference Include="Fody" Version="6.9.3" Condition="'$(UseCostura)' == 'true'" PrivateAssets="all" />
+    <PackageReference Include="Costura.Fody" Version="6.2.0" Condition="'$(UseCostura)' == 'true'" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

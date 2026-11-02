@@ -43,6 +43,13 @@
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
     </svg>
   </button>
+  <button id="btn-onboarding" type="button" title="首次使用引导" aria-label="首次使用引导">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M9.2 9.2a2.8 2.8 0 1 1 3.9 2.6c-.7.3-1.1 1-1.1 1.8v.2"/>
+      <path d="M12 17.2h.01"/>
+    </svg>
+  </button>
 </div>
 
 <main id="content">
@@ -52,26 +59,74 @@
     <div id="date">&nbsp;</div>
   </div>
 
-  <!-- c) 搜索框 -->
+  <!-- c) 搜索框：白色大圆角主控件（参考夸克的视觉权重），左侧引擎、右侧提交 -->
   <form id="search-form" role="search">
     <button id="engine-btn" type="button" title="点击切换搜索引擎" aria-label="切换搜索引擎">
       <span class="engine-icon" id="engine-icon">度</span>
     </button>
     <input id="search-input" type="text" placeholder="搜索或输入网址" autocomplete="off" autofocus>
+    <button id="search-submit" type="submit" title="搜索" aria-label="搜索">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 19V5"/>
+        <path d="M6 11l6-6 6 6"/>
+      </svg>
+    </button>
   </form>
 
-  <!-- d) 快捷方式（桩数据，JS 渲染） -->
+  <!-- d) 快捷方式（JS 渲染，可本地增删并持久化） -->
   <nav id="shortcuts" aria-label="快捷方式"></nav>
-
-  <!-- e) 隐私统计卡 -->
-  <div id="stats-card" role="status">
-    <svg class="shield-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M12 2l8 3v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V5l8-3z"/>
-      <path d="M9 12l2 2 4-4"/>
-    </svg>
-    <span>本周已拦截&nbsp;<span class="stat-num" id="stat-trackers">0</span>&nbsp;条追踪 ·&nbsp;<span class="stat-num" id="stat-ads">0</span>&nbsp;个广告</span>
-  </div>
 </main>
+
+<!-- d) 快捷方式新增面板：必须是 body 直接子节点。
+     #content 带 transform（入场动画），会给 position:fixed 后代建立包含块，
+     对话框留在其中会按 #content 的盒子定位而偏到左上角，遮罩也盖不满视口。 -->
+<dialog id="shortcut-dialog" aria-labelledby="shortcut-dialog-title">
+  <form id="shortcut-form" method="dialog" autocomplete="off">
+    <h2 id="shortcut-dialog-title">添加快捷方式</h2>
+    <label>名称
+      <input id="shortcut-name" type="text" maxlength="24" placeholder="例如 GitHub">
+    </label>
+    <label>网址
+      <input id="shortcut-url" type="text" maxlength="2048" placeholder="example.com" required>
+    </label>
+    <p id="shortcut-error" role="alert"></p>
+    <div id="shortcut-actions">
+      <button id="shortcut-cancel" type="button">取消</button>
+      <button id="shortcut-save" type="submit">添加</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- R9 首启引导卡：一次性；只读展示隐私现状（不提供任何隐私默认值改写入口，红线 2），
+     可选默认搜索引擎（既有 setSearchEngine 桥，非隐私默认值）。与 shortcut-dialog 同理：
+     必须是 body 直接子节点，避免 #content 的 transform 包含块破坏 showModal 定位。 -->
+<dialog id="onboarding-dialog" aria-labelledby="onboarding-title">
+  <div class="onboarding-card">
+    <h2 id="onboarding-title">一个页面，干净打开</h2>
+    <p class="onboarding-sub">Apage 是超轻量、隐私优先的便携浏览器。两件事，现在就可以知道。</p>
+
+    <section class="onboarding-section">
+      <h3>默认搜索引擎</h3>
+      <div class="onboarding-engines" id="onboarding-engines" role="radiogroup" aria-label="默认搜索引擎"></div>
+      <p class="onboarding-hint">之后随时可在地址栏左侧或设置里更改。</p>
+    </section>
+
+    <section class="onboarding-section">
+      <h3>隐私保护（当前状态，只读）</h3>
+      <ul class="onboarding-privacy" id="onboarding-privacy"></ul>
+      <p class="onboarding-hint">
+        能力边界：SmartScreen 信誉检查已默认关闭（它会把不在本地名单的网址上传微软）；
+        不提供指纹防护与恶意软件黑名单；全部出站路径见产品文档 §5.2。
+        各项开关可在设置窗口更改。
+      </p>
+    </section>
+
+    <div class="onboarding-actions">
+      <button id="onboarding-done" type="button" class="onboarding-primary">开始使用</button>
+    </div>
+  </div>
+</dialog>
 
 <!-- f) 壁纸面板：底部滑出 -->
 <div id="wallpaper-panel" role="dialog" aria-label="壁纸设置">

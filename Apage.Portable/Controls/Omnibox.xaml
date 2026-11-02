@@ -177,6 +177,7 @@
                      CaretBrush="{DynamicResource Apage.Brush.Accent}"
                      SelectionBrush="{DynamicResource Apage.Brush.Accent}" SelectionOpacity="0.28"
                      GotKeyboardFocus="UrlBox_GotKeyboardFocus"
+                     LostKeyboardFocus="UrlBox_LostKeyboardFocus"
                      TextChanged="UrlBox_TextChanged"
                      PreviewKeyDown="UrlBox_PreviewKeyDown">
                 <TextBox.Template>

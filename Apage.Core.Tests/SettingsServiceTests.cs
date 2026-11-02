@@ -44,7 +44,7 @@ public sealed class SettingsServiceTests : IDisposable
 
         var loaded = await svc.LoadAsync();
 
-        Assert.True(loaded.BlockThirdPartyCookies);
+        Assert.False(loaded.BlockThirdPartyCookies);
         Assert.Equal("bing", loaded.SearchEngine);
         Assert.False(File.Exists(_file)); // 加载缺失文件不应写盘
     }
@@ -74,7 +74,7 @@ public sealed class SettingsServiceTests : IDisposable
         var loaded = await new SettingsService(_file).LoadAsync();
 
         // 损坏文件不得导致抛异常，回落默认（隐私基线）
-        Assert.True(loaded.BlockThirdPartyCookies);
+        Assert.False(loaded.BlockThirdPartyCookies);
         Assert.Equal("bing", loaded.SearchEngine);
     }
 

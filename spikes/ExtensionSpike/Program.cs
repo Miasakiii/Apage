@@ -152,8 +152,11 @@ internal static class Program
         try
         {
             // ---------- 4) 初始化 WebView2 ----------
-            Log("--- [4] 初始化 WebView2 ---");
-            var env = await CoreWebView2Environment.CreateAsync(null, udfDir);
+            // AreBrowserExtensionsEnabled 默认 false，不开则 AddBrowserExtensionAsync 直接抛
+            // 0x80070032（ERROR_NOT_SUPPORTED）；只能随 Environment 创建一次性指定（SDK XML 文档明示）。
+            Log("--- [4] 初始化 WebView2（AreBrowserExtensionsEnabled=true） ---");
+            var env = await CoreWebView2Environment.CreateAsync(null, udfDir,
+                new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = true });
             await webView.EnsureCoreWebView2Async(env);
             var core = webView.CoreWebView2;
             Log($"OK: CoreWebView2 初始化完成，CookieManager 可用={core.CookieManager != null}");

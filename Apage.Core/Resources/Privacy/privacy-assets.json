@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-10-29T11:10:50.1986491+00:00",
+  "psl": {
+    "file": "public_suffix_list.dat",
+    "sha256": "1f96bae40adfc22ca2474d7c0099bbcfcb25aefd3e2547b5c2147c0dd2e3ebd9",
+    "version": "2026-10-28_13-15-55_UTC",
+    "commit": "9dfbe81931367b3f0af21035c36ae7eeb830dd88",
+    "sourceUrl": "https://publicsuffix.org/list/public_suffix_list.dat",
+    "retrievedAtUtc": "2026-10-29T11:06:14.0511803+00:00",
+    "license": "MPL-2.0",
+    "licenseUrl": "https://mozilla.org/MPL/2.0/"
+  },
+  "rules": {
+    "file": "builtin-rules.txt",
+    "sha256": "af2e211228b94d4a7042cb32d400e092dc274dddf22127275f82b5d05ea7cb8c",
+    "acceptedRules": 94646,
+    "skippedRules": 38432,
+    "duplicateRules": 22,
+    "skipReasons": {
+      "empty": 0,
+      "comment": 1049,
+      "tooLong": 2,
+      "cosmetic": 24196,
+      "cosmeticUnsupported": 564,
+      "unsupportedModifier": 12590,
+      "unsupportedRegex": 9,
+      "invalid": 0,
+      "duplicate": 22
+    },
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "attribution": "The EasyList authors (https://easylist.to/)",
+    "sources": [
+      {
+        "name": "EasyList",
+        "url": "https://easylist.to/easylist/easylist.txt",
+        "retrievedAtUtc": "2026-10-29T11:06:16.1514379+00:00",
+        "sha256": "67061adc4dc37e2898b90a52b665baf9c42e96622c7f5e6980c1c2753895182b",
+        "totalLines": 75877,
+        "acceptedRules": 43827,
+        "skippedRules": 32050,
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      {
+        "name": "EasyPrivacy",
+        "url": "https://easylist.to/easylist/easyprivacy.txt",
+        "retrievedAtUtc": "2026-10-29T11:06:19.1212584+00:00",
+        "sha256": "285db030e6484f511e474fd6bdaedff8a569fcda010957485c09e3302a315c08",
+        "totalLines": 57201,
+        "acceptedRules": 50819,
+        "skippedRules": 6382,
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/"
+      }
+    ]
+  }
+}

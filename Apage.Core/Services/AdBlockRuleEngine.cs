@@ -6,6 +6,21 @@ using System.Text.RegularExpressions;
 
 namespace Apage.Core.Services;
 
+/// <summary>规则分类：快照生成与运行时加载共用，避免“能打包但不能正确执行”的规则混入。</summary>
+public enum AdBlockRuleKind
+{
+    Empty,
+    Comment,
+    TooLong,
+    Cosmetic,
+    CosmeticUnsupported,
+    UnsupportedModifier,
+    UnsupportedRegex,
+    Invalid,
+    Block,
+    Exception
+}
+
 /// <summary>
 /// ABP 风格广告拦截引擎（docs/product-design.md §5.3，实现移植自 spikes/AdBlockSpike 的已验证方案）。
 /// 每条网络规则提取一个 3-8 字符字母数字关键子串作为索引 key，匹配时枚举 URL 子串查表，
@@ -27,8 +42,7 @@ public sealed class AdBlockRuleEngine
     /// <summary>一条解析后的网络规则（拦截或例外）。</summary>
     private sealed class AdRule
     {
-        public string Pattern = string.Empty;   // 参与 URL 匹配的部分（去掉 @@ 前缀与 $ 修饰符）
-        public string? Modifiers;               // $ 之后的修饰符（script,domain=...），当前只解析不求值
+        public string Pattern = string.Empty;   // 参与 URL 匹配的部分（去掉 @@ 前缀）
         public Regex? Matcher;                  // 懒编译：只有成为候选的规则才编译正则
     }
 
@@ -51,28 +65,73 @@ public sealed class AdBlockRuleEngine
     /// <summary>匹配中触发 RegexMatchTimeoutException 的累计次数（超时视为不匹配）。</summary>
     public int TimeoutCount { get; private set; }
 
+    /// <summary>
+    /// 因含当前引擎无法完整求值的 $ 修饰符而被拒收的规则数。
+    /// 用于诊断快照筛选质量；这些规则绝不退化为无修饰符的宽泛匹配。
+    /// </summary>
+    public int UnsupportedModifierRuleCount { get; private set; }
+
     // 常见通用 token：作为 key 会聚集大量规则，降权处理（spike 建议 #1）
     private static readonly HashSet<string> CommonTokens = new(StringComparer.Ordinal)
         { "com", "net", "org", "www", "http", "https", "html", "cdn", "js", "css" };
 
     /// <summary>
-    /// 添加一条规则。注释（! 开头）、列表头（[ 开头]）、空行与超长规则返回 false（被忽略）。
+    /// 规则分类。只有 <see cref="AdBlockRuleKind.Block"/> / <see cref="AdBlockRuleKind.Exception"/>
+    /// 和基础 <see cref="AdBlockRuleKind.Cosmetic"/> 可入库；其余必须在快照生成阶段跳过。
+    /// </summary>
+    public static AdBlockRuleKind Classify(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return AdBlockRuleKind.Empty;
+        var rule = raw!.Trim();
+        if (rule.Length > MaxRuleLength)
+            return AdBlockRuleKind.TooLong;
+        if (rule[0] == '!' || rule[0] == '[')
+            return AdBlockRuleKind.Comment;
+
+        if (rule.IndexOf("##", StringComparison.Ordinal) >= 0)
+            return AdBlockRuleKind.Cosmetic;
+        if (ContainsAny(rule, "#@#", "#?#", "#$#", "#%#"))
+            return AdBlockRuleKind.CosmeticUnsupported;
+
+        var isException = rule.StartsWith("@@", StringComparison.Ordinal);
+        var body = isException ? rule.Substring(2) : rule;
+        if (body.Length == 0)
+            return AdBlockRuleKind.Invalid;
+        if (body.IndexOf('$') >= 0)
+            return AdBlockRuleKind.UnsupportedModifier;
+        if (body.Length >= 2 && body[0] == '/' && body[body.Length - 1] == '/')
+            return AdBlockRuleKind.UnsupportedRegex;
+
+        return isException ? AdBlockRuleKind.Exception : AdBlockRuleKind.Block;
+    }
+
+    /// <summary>
+    /// 添加一条规则。注释（! 开头）、列表头（[ 开头]）、空行、超长规则与不可执行语法返回 false。
     /// </summary>
     public bool AddRule(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw))
-            return false;
-        var rule = raw!.Trim();
-        if (rule.Length > MaxRuleLength)
-            return false; // §5.3 单条规则长度上限
-        if (rule[0] == '!' || rule[0] == '[')
-            return false; // 注释行 / 列表头（[Adblock Plus 2.0]）
+        var kind = Classify(raw);
+        switch (kind)
+        {
+            case AdBlockRuleKind.Empty:
+            case AdBlockRuleKind.Comment:
+            case AdBlockRuleKind.TooLong:
+            case AdBlockRuleKind.CosmeticUnsupported:
+            case AdBlockRuleKind.UnsupportedRegex:
+            case AdBlockRuleKind.Invalid:
+                return false;
+            case AdBlockRuleKind.UnsupportedModifier:
+                UnsupportedModifierRuleCount++;
+                return false;
+        }
 
+        var rule = raw!.Trim();
         // 化妆规则（##.ad）：独立存储，不进入网络匹配索引
-        int hashHash = rule.IndexOf("##", StringComparison.Ordinal);
-        if (hashHash >= 0)
+        if (kind == AdBlockRuleKind.Cosmetic)
         {
             CosmeticCount++;
+            int hashHash = rule.IndexOf("##", StringComparison.Ordinal);
             string domain = rule.Substring(0, hashHash);
             string selector = rule.Substring(hashHash + 2);
             if (domain.Length == 0)
@@ -86,23 +145,10 @@ public sealed class AdBlockRuleEngine
             return true;
         }
 
-        bool isException = rule.StartsWith("@@", StringComparison.Ordinal);
+        bool isException = kind == AdBlockRuleKind.Exception;
         string body = isException ? rule.Substring(2) : rule;
-        if (body.Length == 0)
-            return false;
-
         string pattern = body;
-        string? mods = null;
-        int dollar = body.IndexOf('$');
-        if (dollar >= 0)
-        {
-            pattern = body.Substring(0, dollar);
-            mods = body.Substring(dollar + 1);
-        }
-        if (pattern.Length == 0)
-            return false; // 纯修饰符规则（$popup 等）暂不支持 URL 匹配
-
-        var parsed = new AdRule { Pattern = pattern.ToLowerInvariant(), Modifiers = mods };
+        var parsed = new AdRule { Pattern = pattern.ToLowerInvariant() };
         if (isException) ExceptionCount++; else BlockCount++;
 
         string? key = ExtractKey(parsed.Pattern);
@@ -134,7 +180,7 @@ public sealed class AdBlockRuleEngine
     {
         if (string.IsNullOrWhiteSpace(url))
             return false;
-        string u = url!.ToLowerInvariant();
+        string u = NormalizeUrlForMatching(url!.ToLowerInvariant());
 
         foreach (string key in EnumerateKeys(u))
         {
@@ -276,6 +322,60 @@ public sealed class AdBlockRuleEngine
                 if (ok) yield return url.Substring(i, len);
             }
         }
+    }
+
+    /// <summary>
+    /// URL authority 归一（仅用于规则匹配，不用于持久化）：去掉 userinfo、去掉主机末尾的 DNS 根点。
+    /// 这两类等价写法会让 `||domain^` 规则失效，但不需要引入完整 URL 解析/重编码，
+    /// 以免改变路径与查询串的原始字节。
+    /// </summary>
+    private static string NormalizeUrlForMatching(string url)
+    {
+        var schemeSeparator = url.IndexOf("://", StringComparison.Ordinal);
+        if (schemeSeparator < 0)
+            return url;
+
+        var scheme = url.Substring(0, schemeSeparator);
+        if (!string.Equals(scheme, "http", StringComparison.Ordinal) &&
+            !string.Equals(scheme, "https", StringComparison.Ordinal))
+        {
+            return url;
+        }
+
+        var authorityStart = schemeSeparator + 3;
+        var authorityEnd = url.IndexOfAny(new[] { '/', '?', '#' }, authorityStart);
+        if (authorityEnd < 0)
+            authorityEnd = url.Length;
+
+        var authority = url.Substring(authorityStart, authorityEnd - authorityStart);
+        var at = authority.LastIndexOf('@');
+        if (at >= 0)
+            authority = authority.Substring(at + 1);
+
+        if (!authority.StartsWith("[", StringComparison.Ordinal)) // IPv6 字面量不做尾点裁剪
+        {
+            var portSeparator = authority.LastIndexOf(':');
+            var host = portSeparator >= 0 ? authority.Substring(0, portSeparator) : authority;
+            var port = portSeparator >= 0 ? authority.Substring(portSeparator) : string.Empty;
+            if (host.EndsWith(".", StringComparison.Ordinal))
+                host = host.Substring(0, host.Length - 1);
+            authority = host + port;
+        }
+
+        return string.Concat(
+            url.Substring(0, authorityStart),
+            authority,
+            url.Substring(authorityEnd));
+    }
+
+    private static bool ContainsAny(string text, params string[] markers)
+    {
+        foreach (var marker in markers)
+        {
+            if (text.IndexOf(marker, StringComparison.Ordinal) >= 0)
+                return true;
+        }
+        return false;
     }
 
     // netstandard2.0 无 char.IsAsciiLetterOrDigit，手写等价判断
