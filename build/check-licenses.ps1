@@ -95,13 +95,32 @@ if ($failures.Count -eq 0) {
         }
     }
 
+    # 行尾不变量：隐私资产在对象库里是 LF，.gitattributes 以
+    # `Apage.Core/Resources/Privacy/** -text` 禁止任何平台做行尾归一化。
+    # 一旦工作区出现 CRLF（修复前检出的旧工作区、编辑器另存、autocrlf 规则被绕过），
+    # 字节流漂移会让 SHA-256 与清单不符——先按根因报错，而不是两条无法归因的哈希违规
+    # （PR #2 CI 事故：`* text=auto` 在 Windows 检出时把 LF 转成 CRLF）。
+    foreach ($asset in @($pslPath, $rulesPath)) {
+        $assetText = [System.IO.File]::ReadAllText($asset)
+        if ($assetText.Contains([char]13)) {
+            $failures.Add(
+                "$(Split-Path -Leaf $asset) has CRLF line endings; privacy assets must stay LF-only " +
+                '(.gitattributes marks Apage.Core/Resources/Privacy/** -text). ' +
+                'Re-checkout the asset: git checkout -- Apage.Core/Resources/Privacy')
+        }
+    }
+
     $pslHash = (Get-FileHash -LiteralPath $pslPath -Algorithm SHA256).Hash
     $rulesHash = (Get-FileHash -LiteralPath $rulesPath -Algorithm SHA256).Hash
     if ($pslHash -ne $manifest.psl.sha256) {
-        $failures.Add('PSL hash does not match privacy-assets.json')
+        $failures.Add(
+            'PSL hash does not match privacy-assets.json; regenerate the snapshot with ' +
+            'tools\SnapshotBuilder\update-snapshot.ps1 instead of hand-editing the assets')
     }
     if ($rulesHash -ne $manifest.rules.sha256) {
-        $failures.Add('rule snapshot hash does not match privacy-assets.json')
+        $failures.Add(
+            'rule snapshot hash does not match privacy-assets.json; regenerate the snapshot with ' +
+            'tools\SnapshotBuilder\update-snapshot.ps1 instead of hand-editing the assets')
     }
 }
 
