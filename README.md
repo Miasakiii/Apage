@@ -18,9 +18,9 @@
 
 - **S0–S3 功能包已完成**（D1/A1/B1/C1/A2/D2/B2/A3/S3），P0/P1 硬化切片已落地：**305 项 Core 单测**、五条红线、Release 构建、五信号 smoke、真实数据往返、查找条与提示条布局探针通过。
 - **隐私承诺纠偏**：真机探针证实 `WebResourceRequested` 删除 Cookie 后 WebView2 网络栈仍会重新发送，**“第三方 Cookie 剥离/追踪计数”已从能力、设置、NTP/隐私盾与宣传中移除**；旧字段仅保留兼容且默认 `false`。证据见 [Cookie 探针](docs/spikes/results/cookie-privacy.md) 与 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)。
-- **生产单文件与发布门禁**：`build\package.ps1` 产出 **1 文件 / 4,068,352 字节** 的 `Apage.Portable.exe`（版本 0.1.0.0，SHA-256 `573E5F52…9E582FEE`），并生成 release manifest 与独立 legal bundle。本轮打包为 `-SkipStartupBench` 调试验收；尚未签名，最终干净工作区打包、启动门禁、签名与签名后复验属 S4。
+- **生产单文件与发布门禁**：在干净工作区 `137bddb` 上执行 `build\package.ps1 -SkipBuild -RequireCleanWorktree` 通过，产出 **1 文件 / 4,068,352 字节** 的 `Apage.Portable.exe`（版本 0.1.0.0，SHA-256 `573E5F52…9E582FEE`，`worktreeDirty=false`），并生成 release manifest 与独立 legal bundle。尚未签名，签名与签名后复验仍属 S4。
 - **隐私资产已闭环**：PSL `2026-10-28` 版本；内置 EasyList/EasyPrivacy 快照 **94,646 条**通过 SHA-256 校验，MIT/MPL/CC 许可全文随包；运行时零自动更新请求。
-- **启动指标（2026-11-02，负载条件）**：首启 ContentRendered **1077.5ms**，热启中位 **939.15ms**，在开机后约 **33%–36% CPU** 占用下以 60.85ms 余量通过本机 1000ms 门禁。该结果**不是安静参考机结论**，首启仍超过 1 秒；正式发布须在稳定参考环境复测。
+- **启动指标（2026-11-02，正式单文件 3 轮）**：首启 ContentRendered **1026.2ms**，热启中位 **959.25ms**。热启通过本机 1000ms 打包门禁，但首启仍超过 1 秒，且当前不是稳定参考机；完整发布验收未通过。
 - **数据、查找与规则更新已闭环**：书签/历史/下载落 SQLite（隐私标签不记历史），支持 Chrome/Edge 书签 HTML 导入；地址栏本地建议与 Ctrl+F 页内查找可用；规则更新仅在设置里手动点击触发，逐跳 HTTPS、全程串行、校验后原子替换，热更新保留 `adblock/*.txt` 用户规则。
 - **证据与后续顺序**：见 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)、[S4 硬化验证](docs/design/2026-11-02-s4-hardening-validation.md)、[Cookie 探针](docs/spikes/results/cookie-privacy.md)、[S4 启动复验记录](docs/design/2026-11-02-s4-startup-recheck.md)、[B2/A3 实施记录](docs/design/2026-10-29-b2-data-a3-rule-update.md)、[D2 发布工程记录](docs/design/2026-10-29-d2-release-engineering.md)、[签名手册](docs/release/signing.md)、[A2 实施记录](docs/design/2026-10-29-a2-psl-rule-snapshot.md)、[S2 第一批实施记录](docs/design/2026-10-29-s2-first-slice.md)、[S1 验证结果](docs/spikes/results/single-file.md) 与 [v0.1 发布收敛计划](docs/design/2026-10-28-v01-release-convergence.md)。
 

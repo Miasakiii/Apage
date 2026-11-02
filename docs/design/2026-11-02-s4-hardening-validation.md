@@ -72,15 +72,35 @@ sha256=a84f84d149a2c9ec2948c7b9439458924ed8eb7d205c6d9539a596c248e29b0e
 - ACL 已在测试后恢复，临时目录已清理。
 - 该场景下 session/统计/书库/SQLite 数据能力不可用，属预期降级。
 
+### 6. 干净工作区正式打包
+
+提交 `137bddb` 后执行：
+
+```powershell
+build\package.ps1 -SkipBuild -Configuration Release -RequireCleanWorktree
+```
+
+| 项 | 结果 |
+|---|---|
+| 单文件 | 1 文件 / **4,068,352 字节** |
+| SHA-256 | `573E5F52A2B651B17825F8C26A12CC40F6BBF4C115195017CF1B4EAF9E582FEE` |
+| worktreeDirty | **false** |
+| 签名 | NotSigned |
+| first ContentRendered | **1026.2ms（>1000ms）** |
+| warm median | **959.25ms（通过 1000ms 打包门禁）** |
+| smoke / 许可 / 体积 / 资产哈希 | 全部通过 |
+
+该哈希与提交前用同一源码进行的 `-SkipStartupBench` 打包一致，单文件构建可复现。首启仍超 1 秒，因此只能认定“打包门禁通过”，不能认定“完整发布验收通过”。
+
 ## 二、未完成项（不得视为通过）
 
 | 项 | 原因 | 所需条件 |
 |---|---|---|
 | exFAT 真盘矩阵 | 当前无 exFAT 移动介质 | 物理 U 盘/分区，复跑 AtomicJsonStore、SQLite、原生缓存与只读矩阵 |
 | 真机点击 | 本环境无法可靠模拟真实鼠标/键盘走查 | Ctrl+F 全路径、隐私盾、下载打开/取消、设置保存 |
-| 稳定参考机启动 | 当前机器存在持续后台负载 | 至少 5 轮首启/热启，记录 CPU、电源计划、Windows/WebView2 版本 |
+| 稳定参考机启动 | 当前机器存在持续后台负载；首启 1026.2ms > 1s | 至少 5 轮首启/热启，记录 CPU、电源计划、Windows/WebView2 版本 |
 | 代码签名 | 无可用 Authenticode 证书 | SignPath 审批或自有证书；签名后同产物全量复验 |
 
 ## 三、结论
 
-P0/P1 硬化项的自动化证据已齐备；真实规则更新、SQLite/缓存/只读目录降级均通过。**v0.1 RC 仍不能放行**，阻断项为 exFAT 矩阵、真机交互、参考机启动和签名。
+P0/P1 硬化项的自动化证据已齐备；真实规则更新、SQLite/缓存/只读目录降级、干净工作区正式打包均通过。**v0.1 RC 仍不能放行**，阻断项为 exFAT 矩阵、真机交互、首启 1026.2ms/稳定参考机复测和签名。

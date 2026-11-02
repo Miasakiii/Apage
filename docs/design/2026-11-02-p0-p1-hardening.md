@@ -58,7 +58,8 @@
 | 许可 | 通过 |
 | Release 构建 | 通过 |
 | 五信号 smoke | 通过；含数据往返、查找/Toast 布局与 NTP `getStats` 来源门控探针 |
-| 单文件打包（`-SkipStartupBench`） | 通过；1 文件 / **4,068,352 字节** / SHA-256 `573E5F52…9E582FEE` / NotSigned |
+| 单文件打包（干净工作区） | 通过；1 文件 / **4,068,352 字节** / SHA-256 `573E5F52…9E582FEE` / `worktreeDirty=false` / NotSigned |
+| 正式启动基准 | 首启 **1026.2ms（>1s）**；热启中位 **959.25ms**；打包门禁按热启通过，完整发布未通过 |
 | Cookie 探针 | 通过执行，结论为“事件删除无效” |
 
 新增回归覆盖：原子写 Replace/Copy 故障、备份/临时文件恢复、下载终态不可回退、按 id/时间裁剪孤儿、用户规则热更新保留、并发更新串行、URL userinfo、日志导出源冲突、ABP userinfo/尾点。
@@ -67,7 +68,7 @@
 
 以下仍属 S4。可在本机自动执行的部分已记录于 [S4 硬化验证](2026-11-02-s4-hardening-validation.md)：
 
-1. 干净工作区后的正式 `package.ps1 -RequireCleanWorktree`、启动门禁与签名后同产物复验；
+1. 干净工作区正式 `package.ps1 -RequireCleanWorktree` 已通过；首启 1026.2ms 仍超 1s，需稳定参考机 5 轮复测并与签名后同产物复验；
 2. 稳定参考机至少 5 轮启动复测；
 3. 真实网络规则更新已通过；真机点击矩阵（Ctrl+F / 隐私盾 / 下载打开与取消）待人工；
 4. 只读目录、缓存与 SQLite 损坏已通过；exFAT 真盘与异常退出矩阵待物理介质；
