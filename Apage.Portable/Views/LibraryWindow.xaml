@@ -93,6 +93,15 @@
             <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True"/>
             <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling"/>
         </Style>
+
+        <!-- 空状态（quickWin §7.2）：居中 48px 线性图标 + 一句文案 + 引导；
+             纯 XAML DataTrigger 绑 Items.Count，无代码依赖，点击穿透不挡操作 -->
+        <Style x:Key="EmptyStateBorder" TargetType="Border">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+            <Setter Property="Visibility" Value="Collapsed"/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="20">
@@ -133,6 +142,27 @@
                              Style="{StaticResource LibraryListStyle}"
                              ItemTemplate="{StaticResource BookmarkRowTemplate}"
                              MouseDoubleClick="BookmarkList_MouseDoubleClick"/>
+                    <Border Grid.Row="1">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource EmptyStateBorder}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Items.Count, ElementName=BookmarkList}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel HorizontalAlignment="Center">
+                            <Path Width="48" Height="48" Stretch="Uniform" Fill="{x:Null}"
+                                  Stroke="{DynamicResource Apage.Brush.TextTertiary}" StrokeThickness="1.2"
+                                  Data="{StaticResource Apage.Geo.Star}"/>
+                            <TextBlock Text="还没有书签" Margin="0,12,0,0" HorizontalAlignment="Center"
+                                       FontSize="14" Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+                            <TextBlock Text="按 Ctrl+D 收藏当前页面，或导入浏览器导出的书签 HTML。"
+                                       Margin="0,4,0,0" HorizontalAlignment="Center" TextAlignment="Center"
+                                       FontSize="12" Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </TabItem>
 
@@ -159,6 +189,27 @@
                              Style="{StaticResource LibraryListStyle}"
                              ItemTemplate="{StaticResource HistoryRowTemplate}"
                              MouseDoubleClick="HistoryList_MouseDoubleClick"/>
+                    <Border Grid.Row="1">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource EmptyStateBorder}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Items.Count, ElementName=HistoryList}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel HorizontalAlignment="Center">
+                            <Path Width="48" Height="48" Stretch="Uniform" Fill="{x:Null}"
+                                  Stroke="{DynamicResource Apage.Brush.TextTertiary}" StrokeThickness="1.2"
+                                  Data="{StaticResource Apage.Geo.History}"/>
+                            <TextBlock Text="还没有历史记录" Margin="0,12,0,0" HorizontalAlignment="Center"
+                                       FontSize="14" Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+                            <TextBlock Text="浏览网页后自动记录在这里；隐私标签的访问不记入。"
+                                       Margin="0,4,0,0" HorizontalAlignment="Center" TextAlignment="Center"
+                                       FontSize="12" Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </TabItem>
 
@@ -178,6 +229,27 @@
                              Style="{StaticResource LibraryListStyle}"
                              ItemTemplate="{StaticResource DownloadRowTemplate}"
                              MouseDoubleClick="DownloadList_MouseDoubleClick"/>
+                    <Border Grid.Row="1">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource EmptyStateBorder}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Items.Count, ElementName=DownloadList}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel HorizontalAlignment="Center">
+                            <Path Width="48" Height="48" Stretch="Uniform" Fill="{x:Null}"
+                                  Stroke="{DynamicResource Apage.Brush.TextTertiary}" StrokeThickness="1.2"
+                                  Data="{StaticResource Apage.Geo.Download}"/>
+                            <TextBlock Text="还没有下载任务" Margin="0,12,0,0" HorizontalAlignment="Center"
+                                       FontSize="14" Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
+                            <TextBlock Text="在网页里下载文件后会显示在这里。"
+                                       Margin="0,4,0,0" HorizontalAlignment="Center" TextAlignment="Center"
+                                       FontSize="12" Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </TabItem>
         </TabControl>
