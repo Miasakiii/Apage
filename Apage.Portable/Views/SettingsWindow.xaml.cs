@@ -20,6 +20,7 @@ public partial class SettingsWindow : Window
     private readonly AppSettings _draft;
     private readonly RuleUpdateService? _ruleUpdates;
     private readonly AdBlockRuleProvider? _ruleProvider;
+    private readonly SiteShieldStore? _siteShields;
     private bool _saving;
     private bool _updatingRules;
 
@@ -33,11 +34,22 @@ public partial class SettingsWindow : Window
         LocalLogService logs,
         RuleUpdateService? ruleUpdates,
         AdBlockRuleProvider? ruleProvider)
+        : this(settings, logs, ruleUpdates, ruleProvider, null)
+    {
+    }
+
+    public SettingsWindow(
+        SettingsService settings,
+        LocalLogService logs,
+        RuleUpdateService? ruleUpdates,
+        AdBlockRuleProvider? ruleProvider,
+        SiteShieldStore? siteShields)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logs = logs ?? throw new ArgumentNullException(nameof(logs));
         _ruleUpdates = ruleUpdates;
         _ruleProvider = ruleProvider;
+        _siteShields = siteShields;
 
         InitializeComponent();
         _draft = Clone(settings.Current);
@@ -48,10 +60,104 @@ public partial class SettingsWindow : Window
         LogPathText.ToolTip = logs.CurrentLogPath;
 
         RefreshRuleInfo();
+        RefreshSiteShieldList();
         if (_ruleUpdates == null)
         {
             UpdateRulesButton.IsEnabled = false;
             RuleSourceText.Text = "规则服务当前不可用（内置快照可能未成功加载）。";
+        }
+    }
+
+    private void RefreshSiteShieldList()
+    {
+        if (_siteShields == null)
+        {
+            SiteShieldHint.Text = "按站点覆盖当前不可用。";
+            AddSiteShieldButton.IsEnabled = false;
+            SiteShieldInput.IsEnabled = false;
+            return;
+        }
+
+        var sites = _siteShields.Snapshot();
+        SiteShieldList.Items.Clear();
+        foreach (var (host, entry) in sites)
+        {
+            var text = entry.Disabled ? host + "（已关闭防护）" : host;
+            if (!string.IsNullOrWhiteSpace(entry.Note))
+                text += " — " + entry.Note;
+            SiteShieldList.Items.Add(new ComboBoxItem
+            {
+                Content = text,
+                Tag = host,
+            });
+        }
+        SiteShieldHint.Text = sites.Count == 0
+            ? "还没有按站点覆盖。为被误伤的站点关闭防护，不会改动上面的全局默认开关。"
+            : "关闭某站点只影响该站点；全局默认开关不变。";
+    }
+
+    private async void AddSiteShield_Click(object sender, RoutedEventArgs e)
+    {
+        if (_siteShields == null)
+            return;
+
+        var host = SiteShieldInput.Text;
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            SiteShieldHint.Text = "请输入站点主机名（如 news.example.com）。";
+            return;
+        }
+
+        AddSiteShieldButton.IsEnabled = false;
+        try
+        {
+            var ok = await _siteShields.SetAsync(host, disabled: true, note: SiteShieldNote.Text);
+            if (!ok)
+            {
+                SiteShieldHint.Text = "主机名无效（仅接受字母数字与 . - _，≤255 字符）。";
+                return;
+            }
+            SiteShieldInput.Text = string.Empty;
+            SiteShieldNote.Text = string.Empty;
+            RefreshSiteShieldList();
+            _logs.Write(LocalLogLevel.Info, "site-shield", "site-shield-added");
+        }
+        catch (Exception ex)
+        {
+            _logs.WriteException("site-shield-add", ex);
+            SiteShieldHint.Text = "保存失败；该站点覆盖未生效。诊断信息已写入本地日志。";
+        }
+        finally
+        {
+            AddSiteShieldButton.IsEnabled = true;
+        }
+    }
+
+    private async void RemoveSiteShield_Click(object sender, RoutedEventArgs e)
+    {
+        if (_siteShields == null)
+            return;
+        if (SiteShieldList.SelectedItem is not ComboBoxItem item || item.Tag is not string host)
+        {
+            SiteShieldHint.Text = "请先选择要移除的站点。";
+            return;
+        }
+
+        RemoveSiteShieldButton.IsEnabled = false;
+        try
+        {
+            await _siteShields.RemoveAsync(host);
+            RefreshSiteShieldList();
+            _logs.Write(LocalLogLevel.Info, "site-shield", "site-shield-removed");
+        }
+        catch (Exception ex)
+        {
+            _logs.WriteException("site-shield-remove", ex);
+            SiteShieldHint.Text = "移除失败；该站点覆盖未改动。";
+        }
+        finally
+        {
+            RemoveSiteShieldButton.IsEnabled = true;
         }
     }
 

@@ -20,6 +20,7 @@ namespace Apage.Portable
     {
         private AppServices? _services;
         private BrowserLifecycleService? _lifecycle;
+        private SiteShieldStore? _siteShields;
         private bool _smokeMode;
 
         protected override void OnStartup(StartupEventArgs e)
@@ -87,6 +88,17 @@ namespace Apage.Portable
 
             StartupMetrics.Mark("SettingsAndStatsReady");
 
+            // 按站点隐私覆盖（R5）：小文件同步读，与设置同路；损坏回落空表不阻断启动
+            _siteShields = new SiteShieldStore(AppPaths.DataDirectory);
+            try
+            {
+                _siteShields.LoadAsync().GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // 覆盖表读取失败不影响浏览：保持空表（全部站点走全局默认）
+            }
+
             // 内核命令行参数收口（R1）：stock 开关常驻 + WebRTC IP 防护按设置生效；
             // 非 stock 开关不传（会被内核静默忽略，制造虚假安全感，见 BrowserArguments.ForbiddenSwitches）
             var browserArgs = BrowserArguments.Build(_services.Settings.Current);
@@ -115,6 +127,8 @@ namespace Apage.Portable
                 Lifecycle = _lifecycle,
                 // 图标缓存只落盘 WebView2 已取回的 favicon，新标签页从本地读，不额外联网
                 Favicons = new FaviconStore(Path.Combine(AppPaths.DataDirectory, "favicons")),
+                // 按站点隐私覆盖（R5）：后台加载，未就绪前查询回落空表（全部站点走全局默认）
+                SiteShields = _siteShields,
             };
             // 内置 PSL/规则与用户规则在窗口首帧后加载（MainWindow.InitializeTabsAsync），
             // 避免 2MB+ 快照解析阻塞 ContentRendered。

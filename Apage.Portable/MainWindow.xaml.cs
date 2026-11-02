@@ -1285,7 +1285,8 @@ namespace Apage.Portable
 
             try
             {
-                var window = new SettingsWindow(_services.Settings, _services.LocalLog, _ruleUpdates, _adBlockProvider)
+                var window = new SettingsWindow(
+                    _services.Settings, _services.LocalLog, _ruleUpdates, _adBlockProvider, _tabContext?.SiteShields)
                 {
                     Owner = this,
                 };

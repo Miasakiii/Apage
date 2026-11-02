@@ -44,4 +44,10 @@ public sealed class BrowserTabContext
     /// 未装配时不写盘，标签图标仍可正常显示，只是新标签页回落字标。
     /// </summary>
     public FaviconStore? Favicons { get; set; }
+
+    /// <summary>
+    /// 按站点隐私覆盖（R5）。站点被用户彻底关闭时，请求管道跳过拦截与计数
+    /// （DNT/GPC 等声明性头仍发送——它们不构成拦截）。未装配时全部站点走全局默认。
+    /// </summary>
+    public SiteShieldStore? SiteShields { get; set; }
 }

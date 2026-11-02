@@ -490,13 +490,19 @@ public partial class BrowserTabView : UserControl
             var engine = provider?.Current ?? Context?.AdBlock;
             if (engine != null && !IsTopLevelDocumentRequest(e) && engine.IsBlocked(uri))
             {
-                var kind = BlockedResponse.For(e.ResourceContext.ToString());
-                var (status, reason) = BlockedResponse.Status(kind);
-                // args.Response 一经赋值请求不再放行；Deny 时传 null 流（空内容 + 403）
-                e.Response = core.Environment.CreateWebResourceResponse(
-                    kind == BlockedResponse.Kind.Deny ? null : new MemoryStream(BlockedResponse.Payload(kind)),
-                    status, reason, BlockedResponse.Headers(kind));
-                Context?.Stats?.RecordAdBlocked();
+                // R5 按站点覆盖：用户彻底关闭该站点防护时，拦截与计数都不生效。
+                // 声明性头（DNT/GPC）不构成拦截，仍照常发送（见上方步骤 1）。
+                var shields = Context?.SiteShields;
+                if (shields == null || !shields.IsDisabled(HostOf(uri)))
+                {
+                    var kind = BlockedResponse.For(e.ResourceContext.ToString());
+                    var (status, reason) = BlockedResponse.Status(kind);
+                    // args.Response 一经赋值请求不再放行；Deny 时传 null 流（空内容 + 403）
+                    e.Response = core.Environment.CreateWebResourceResponse(
+                        kind == BlockedResponse.Kind.Deny ? null : new MemoryStream(BlockedResponse.Payload(kind)),
+                        status, reason, BlockedResponse.Headers(kind));
+                    Context?.Stats?.RecordAdBlocked();
+                }
             }
         };
     }
