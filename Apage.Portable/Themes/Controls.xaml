@@ -34,12 +34,33 @@
                                 CornerRadius="{DynamicResource Apage.CornerRadius.Md}" Opacity="0"/>
                         <Border x:Name="PressedBd" Background="{DynamicResource Apage.Brush.Pressed}"
                                 CornerRadius="{DynamicResource Apage.CornerRadius.Md}" Opacity="0"/>
+                        <!-- 键盘焦点环：2px accent 外圈，仅 IsKeyboardFocusWithin 时显示（§九）；
+                             替换 WPF 默认黑色虚线矩形（鼠标点击不出现） -->
+                        <Border x:Name="FocusRing" BorderBrush="{DynamicResource Apage.Brush.Accent}"
+                                BorderThickness="2" CornerRadius="{DynamicResource Apage.CornerRadius.Md}"
+                                Opacity="0"/>
                         <ContentPresenter Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           RecognizesAccessKey="True"/>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="FocusRing" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="FocusRing" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Trigger.EnterActions>
                                 <BeginStoryboard>
@@ -92,6 +113,74 @@
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
+    <!-- ================= ListBoxItem（书签/历史/下载列表，§7 半成品感修复） ================= -->
+    <Style x:Key="Apage.Style.ListBoxItem" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="Margin" Value="0,1"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid>
+                        <Border x:Name="Bd" Background="Transparent"
+                                BorderBrush="{DynamicResource Apage.Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="6"/>
+                        <Border x:Name="HoverBd" Background="{DynamicResource Apage.Brush.Hover}"
+                                CornerRadius="6" Opacity="0"/>
+                        <Border x:Name="SelectedBd" Background="{DynamicResource Apage.Brush.AccentSoft}"
+                                CornerRadius="6" Opacity="0"/>
+                        <!-- 键盘焦点环：2px accent 外圈，仅 IsKeyboardFocusWithin 时显示（§九） -->
+                        <Border x:Name="FocusRing" BorderBrush="{DynamicResource Apage.Brush.Accent}"
+                                BorderThickness="2" CornerRadius="6"
+                                Opacity="0"/>
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverBd" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverBd" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="SelectedBd" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="FocusRing" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="FocusRing" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ================= Toggle 开关 48x26 胶囊（§7.1） ================= -->

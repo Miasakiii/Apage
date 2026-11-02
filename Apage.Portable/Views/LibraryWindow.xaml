@@ -89,6 +89,9 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="Padding" Value="4"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource Apage.Style.ListBoxItem}"/>
+            <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True"/>
+            <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling"/>
         </Style>
     </Window.Resources>
 
