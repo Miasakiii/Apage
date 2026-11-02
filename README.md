@@ -1,214 +1,191 @@
-# Apage
+<div align="center">
 
-> 一个页面，干净打开。
+![Apage — 一个页面，干净打开](assets/hero.svg)
 
-超轻量、隐私优先、全本地化的 Windows 便携浏览器。
+[![CI](https://img.shields.io/github/actions/workflow/status/Miasakiii/Apage/ci.yml?branch=main&logo=github&label=CI)](https://github.com/Miasakiii/Apage/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6?logo=windows&logoColor=white)
+![Runtime](https://img.shields.io/badge/.NET%20Framework-4.8-512BD4?logo=.net&logoColor=white)
+![Single File](https://img.shields.io/badge/Single%20File-%E2%89%884%20MB-success)
+![Tests](https://img.shields.io/badge/Unit%20Tests-467%20passed-brightgreen)
 
-## 特性
+**超轻量 · 隐私优先 · 全本地化的 Windows 便携浏览器**
 
-- **极致轻量** — 发布目标为 x64 单文件 EXE、签名后 <5MB、窗口可见 <1秒
-- **隐私默认全开** — DNT/GPC、WebRTC 防护与 EasyList/EasyPrivacy 兼容快照默认启用；所有隐私声明以可复现验证为准
-- **全本地化** — 零遥测、零后台请求、零数据收集
-- **无需登录** — 不强制账号，不要求云同步
-- **Portable** — 数据跟程序走，U盘即插即用（前提：目标机已装 WebView2 Runtime，Win11 默认预装）
-- **无广告** — 浏览器本身无任何广告或推广
-- **壁纸新标签页** — 支持自定义静态壁纸，拖拽即设置
+</div>
 
-## 发布现状（2026-11-02）
+---
 
-- **S0–S3 功能包已完成**（D1/A1/B1/C1/A2/D2/B2/A3/S3），P0/P1 硬化切片已落地；2026-11-02 参考仓库调研与优化方案 Phase 0–D 实施完成（[实施记录](docs/design/2026-11-02-reference-repo-optimization.md)）：**467 项 Core 单测**、五条红线、Release 构建、五信号 smoke、真实数据往返、查找条与提示条布局探针、首启零非白名单出站探针通过。
-- **隐私承诺纠偏**：真机探针证实 `WebResourceRequested` 删除 Cookie 后 WebView2 网络栈仍会重新发送，**“第三方 Cookie 剥离/追踪计数”已从能力、设置、NTP/隐私盾与宣传中移除**；旧字段仅保留兼容且默认 `false`。证据见 [Cookie 探针](docs/spikes/results/cookie-privacy.md) 与 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)。
-- **生产单文件与发布门禁**：在干净工作区 `137bddb` 上执行 `build\package.ps1 -SkipBuild -RequireCleanWorktree` 通过，产出 **1 文件 / 4,068,352 字节** 的 `Apage.Portable.exe`（版本 0.1.0.0，SHA-256 `573E5F52…9E582FEE`，`worktreeDirty=false`）——此为优化方案实施前的历史证据快照，当前产物状态见下方数字锚点约定。尚未签名，签名与签名后复验仍属 S4。
-- **隐私资产已闭环**：PSL `2026-10-28` 版本；内置 EasyList/EasyPrivacy 快照 **94,646 条**通过 SHA-256 校验，MIT/MPL/CC 许可全文随包；运行时零自动更新请求。
-- **启动指标（2026-11-02，正式单文件 3 轮）**：首启 ContentRendered **1026.2ms**，热启中位 **959.25ms**。热启通过本机 1000ms 打包门禁，但首启仍超过 1 秒，且当前不是稳定参考机；完整发布验收未通过。
-- **数据、查找与规则更新已闭环**：书签/历史/下载落 SQLite（隐私标签不记历史），支持 Chrome/Edge 书签 HTML 导入；地址栏本地建议与 Ctrl+F 页内查找可用；规则更新仅在设置里手动点击触发，逐跳 HTTPS、全程串行、校验后原子替换，热更新保留 `adblock/*.txt` 用户规则。
-- **数字锚点约定**：体积、SHA-256 与启动指标以最近一次 `build\package.ps1` 的 `artifacts/` 证据文件（`portable.metrics.json` / `portable.sha256` / `release-startup/metrics.json`）为准；本文中的数字均为对应提交的证据快照（如 4,068,352 字节 = 干净工作区 `137bddb`）。Phase 0–D 全部落地后重新打包：单文件 **4,190,208 字节**（`f162e20` 起，含 bangs 表与 MorphCore pilot，净增约 122KB，仍在 4.25MB 开发目标内；启动基准见 artifacts/release-startup/，本机负载下 warm median 约 1080ms 未过门禁，属参考机复验项）。
-- **参考仓库优化已落地**（2026-11-02，[实施记录](docs/design/2026-11-02-reference-repo-optimization.md)）：按站点防护覆盖（被误伤的站点单独关闭，不动全局默认）、页级拦截计数 + 地址栏盾牌徽章、便携站点允许清单（`allowlist.txt`）、首启引导卡、深色主题、地址栏 bangs 快捷搜索（`!gh`/`!w`/`!yt` 等）、Menu↔Close 图标形变 pilot、被拦请求返回透明空资源、内核命令行参数收口与首启零出站门禁。
-- **站点图标**：新标签页优先显示站点自带 favicon。用户访问站点时由 WebView2 已取回的图标直接落盘（零额外请求）；四个搜索引擎图标为开箱可用，会在本地无缓存时各抓取一次 `favicon.ico`（HTTPS、仅白名单主机、可在设置关闭）。用户自己添加的站点不做抓取，无图标时回落品牌色字标（[证据](docs/spikes/results/favicon-cache.md)）。
-- **证据与后续顺序**：见 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)、[S4 硬化验证](docs/design/2026-11-02-s4-hardening-validation.md)、[Cookie 探针](docs/spikes/results/cookie-privacy.md)、[S4 启动复验记录](docs/design/2026-11-02-s4-startup-recheck.md)、[B2/A3 实施记录](docs/design/2026-10-29-b2-data-a3-rule-update.md)、[D2 发布工程记录](docs/design/2026-10-29-d2-release-engineering.md)、[签名手册](docs/release/signing.md)、[A2 实施记录](docs/design/2026-10-29-a2-psl-rule-snapshot.md)、[S2 第一批实施记录](docs/design/2026-10-29-s2-first-slice.md)、[S1 验证结果](docs/spikes/results/single-file.md) 与 [v0.1 发布收敛计划](docs/design/2026-10-28-v01-release-convergence.md)。
+## ✨ 为什么是 Apage
 
-## 已知限制（诚实口径）
+现代浏览器越来越重：十几个后台进程、强制登录、云同步、无处不在的推荐位。Apage 反其道而行——
 
-与 Helium 的预期管理做法对齐：明确说清不做什么、什么不受我们控制。
+| 特性 | 说明 |
+|------|------|
+| 🪶 **极致轻量** | 单文件 EXE 约 4MB，目标窗口可见 <1 秒；基于 .NET Framework 4.8（系统自带）+ WebView2（系统 Chromium 内核） |
+| 💾 **Portable** | 数据跟程序走，U盘即插即用，双击就跑，不写注册表、不留安装残留 |
+| 🛡️ **隐私默认全开** | DNT / Sec-GPC 头、WebRTC IP 防护、94,646 条 EasyList/EasyPrivacy 兼容离线规则快照，开箱即生效，无需任何配置 |
+| 🔌 **零遥测 · 零后台请求** | 无统计、无崩溃上报、无云同步、无"检查更新"；全仓仅两条网络出口，由白名单与 CI 门禁双重锁死（见下节） |
+| 🙅 **无需登录** | 不强制账号，不要求云同步，你的浏览数据永远只在你手里 |
+| 🖼️ **壁纸新标签页** | 内置渐变壁纸 / 本地图片拖入即设；搜索、快捷方式、时钟与本周拦截统计一目了然 |
+| 🔍 **顺手好用的日常能力** | 多标签（拖拽排序 / 休眠 / 会话恢复）、书签与历史（SQLite）、Chrome/Edge 书签导入、地址栏本地建议与 `!gh` `!w` `!yt` bangs 快捷搜索、Ctrl+F 页内查找、深色主题 |
+| 🚫 **浏览器本身无广告** | 没有推广位、没有赞助主页、没有弹窗打扰 |
 
-- **WebView2 Runtime 自身诊断数据不可控**：微软文档明确其「无论 Windows 诊断数据设置如何」都会收集性能/可靠性所需数据，宿主应用只能控制 SmartScreen 与自定义崩溃报告。Apage 的「零遥测」覆盖 Apage 自身代码（出站路径经 `build\check-redlines.ps1` 文件级白名单 + `build\outbound-probe.ps1` 首启零非白名单出站门禁双重锁死），不覆盖 Runtime 自身。
-- **无指纹防护**：WebGL/Canvas/WebAudio/WebGPU 参数在 WebView2 壳层不可干预；隐私能力止步于「网络层拦截 + 头部信号（DNT/GPC）+ WebRTC IP 防护」。
-- **无恶意软件黑名单**：ABP 引擎只做广告/跟踪规则拦截；SmartScreen 信誉检查**已默认关闭**（它会把不在本地流行名单的导航 URL 整址上传微软，关闭与「URL 不外传」定位一致，但失去内核级钓鱼/恶意站点提示）。
-- **拦截能力边界**：ABP 子串索引可执行的网络规则子集（含 `$` 修饰符条件规则 fail-closed 拒收）；化妆规则（`##`）后置 Phase 7+；「立即更新规则」之外没有任何自动/静默更新。
-- **站点图标**：未访问过的用户站点没有图标（不联网补图）；引擎图标抓取失败仅在当次会话内不重试。
-- **WebView2 Runtime 是即插即用前提**：Win11 默认预装；未安装时给出中文引导面板，不静默联网下载。
-- **平台**：仅 Windows 10/11 x64 单文件；未代码签名前会触发 SmartScreen 提示（SignPath 申请属 S4）。
+## 🔒 隐私承诺（以及边界）
 
-## 技术栈
+所有隐私声明以**可复现验证**为准，不做无法兑现的承诺。
 
-单押便携版（Apage.Portable）为唯一发布线；Apage.Core 保留分层以备未来衍生。桌面版（Apage.Desktop）暂缓，PMF 验证后条件启动。
+**我们做的：**
 
-| 层级 | 便携版（Apage.Portable，主力） |
-|------|------------------------------|
-| 运行时 | .NET Framework 4.8（Win10/11 系统自带） |
-| 体积 | 发布目标：签名后 <5MB；当前未签名产物实测 4,190,208 字节单 EXE（历史快照 4,068,352 = `137bddb`） |
-| 定位 | U盘即插即用（前提：已装 WebView2 Runtime） |
-| 共享层 | Apage.Core（.NET Standard 2.0，为未来桌面版衍生预留） |
-| UI | WPF（当前 code-behind；MVVM 分层为预留，当前未引入 MVVM 包） |
-| 引擎 | WebView2（系统自带 Chromium） |
-| 通信 | WebMessage（异步，非阻塞） |
-| 存储 | 设置/会话/周统计 JSON；SQLite schema v1 与书签/历史/下载 CRUD 已就绪 |
+- **网络层拦截** — ABP 兼容规则引擎（子串索引，实测 24µs/URL）；内置离线规则快照加载前 SHA-256 校验；不可信规则拒收：超长规则、不支持的修饰符 fail-closed、正则 100ms 超时防 ReDoS
+- **头部信号** — `DNT: 1` + `Sec-GPC: 1` 默认注入
+- **WebRTC IP 泄露防护** — 内核级 `disable_non_proxied_udp`，支持按站点开关
+- **数据全本地** — 书签/历史/下载落本地 SQLite（事务迁移、迁移前备份、损坏不删库）；设置/会话为原子写 JSON；**隐私标签 URL 绝不写入历史与会话文件**
+- **按站点防护覆盖** — 被误伤的内网/特殊站点可单独放行，不必全局降级隐私等级；另支持便携站点允许清单（`allowlist.txt`）预置
+- **零出站门禁** — 每次 CI 构建都以真实进程级探针验证：首启阶段零非白名单网络连接
 
-> **实现现状口径**（克制说明，非缺陷清单）：
-> - **存储**：设置/会话/周统计继续 JSON（`data\settings.json`、`session.json`、`privacy-stats.json`）；SQLite `apage.db` 已具备 v1 schema、事务迁移、迁移前备份和损坏保护，书签/历史/下载 CRUD 与 HTML 导入已落地（见 [roadmap Phase 3](docs/roadmap.md)）。
-> - **UI**：当前为 WPF code-behind（视图与接线在 Apage.Portable 层）；**MVVM 分层为预留**，当前未引入 `CommunityToolkit.Mvvm`（全仓零引用，首发前已移除）。Apage.Core 已按 ViewModels/Models/Services 分层、纯逻辑可单测，便于后续向 MVVM 演进而不必推倒重来。
+**我们不做的（诚实口径）：**
 
-> 桌面版（暂缓，未来可选）：.NET 8 自包含 ~50MB，完整体验。仅在便携版验证 PMF 后再评估，见 [roadmap Phase 8](docs/roadmap.md)。
+- **不宣称能剥离第三方 Cookie** — 真机探针证实：在 `WebResourceRequested` 中删除 Cookie 后，WebView2 网络栈仍会重新附加。该能力已整体下架，**不留死开关、不虚构拦截统计**；仅当 Runtime 未来提供可验证的平台入口时才会重启
+- **无指纹防护** — WebGL / Canvas / WebAudio 参数在 WebView2 壳层不可干预；隐私能力止步于「网络层拦截 + 头部信号 + WebRTC IP 防护」
+- **WebView2 Runtime 自身的诊断数据不受 Apage 控制**（微软文档明示其独立于 Windows 诊断设置）——「零遥测」承诺覆盖 Apage 自身代码，不覆盖 Runtime
+- **无恶意软件/钓鱼黑名单** — SmartScreen 信誉检查已默认关闭，因为它会把导航 URL 整址上传微软，与「URL 不外传」定位冲突；代价是失去内核级风险提示，这一点我们不隐瞒
 
-## 架构
+**全仓仅有的两条网络出口**（由红线脚本按文件白名单锁死 + 首启出站探针验证）：
 
-单押便携版：Apage.Portable 为唯一发布线，Apage.Core 保留分层以备未来衍生。
+1. 设置里**手动点击**「立即更新规则」— 逐跳 HTTPS、限时限大小、校验后原子替换、失败自动回滚并保留旧规则；不点击则运行时零联网
+2. 四个内置搜索引擎的图标在本地无缓存时**各抓取一次** `favicon.ico` — 仅白名单主机、HTTPS、可在设置一键关闭；用户自己添加的站点永不联网补图
 
-```
-┌──────────────────────┐  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
-│  Apage.Portable      │  ┆  Apage.Desktop       ┆
-│  .NET FX 4.8 + WPF   │  ┆  .NET 8 + WPF        ┆
-│  单文件 <5MB（目标） │  ┆  ~50MB（暂缓/未来）  ┆
-│  U盘即插即用         │  ┆  PMF 验证后再评估    ┆
-└──────────┬───────────┘  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
-           │
-           ▼
-┌──────────────────────────────────────────────────┐
-│  Apage.Core (.NET Standard 2.0，为未来衍生预留)   │
-│  ┌──────────────────────────────────────────────┐│
-│  │  ViewModels + Models                         ││
-│  ├──────────────────────────────────────────────┤│
-│  │  Services (AppServices 聚合根)               ││
-│  │  AdBlock · Privacy · ScriptRuntime           ││
-│  │  ScriptMatcher · Storage · Wallpaper         ││
-│  ├──────────────────────────────────────────────┤│
-│  │  WebMessage 通信层（异步，非阻塞）            ││
-│  ├──────────────────────────────────────────────┤│
-│  │  Data Layer (SQLite)                         ││
-│  └──────────────────────────────────────────────┘│
-├──────────────────────────────────────────────────┤
-│  Microsoft WebView2 SDK                          │
-├──────────────────────────────────────────────────┤
-│  系统 Edge WebView2 Runtime (Chromium)            │
-└──────────────────────────────────────────────────┘
+## 🚀 快速开始
+
+**环境要求**：Windows 10/11 x64 + WebView2 Runtime（Win11 默认预装；未安装时 Apage 给出中文引导面板，**绝不静默联网下载**）。
+
+> v0.1 正在收尾（代码签名与参考机启动终验进行中），正式发布后会提供单文件下载。当前可从源码构建：
+
+```powershell
+# 环境：.NET 8 SDK（构建共享层）+ Visual Studio 2022（MSBuild + .NET FX 4.8 目标包）
+
+git clone https://github.com/Miasakiii/Apage.git
+cd Apage
+
+build\build.ps1          # Release 构建整个解决方案（自动定位 VS MSBuild）
+build\smoke.ps1          # 五信号冒烟：应用/窗口/WebView2/SQLite/隐私资产 + 零出站探针
+build\package.ps1        # 正式单文件打包：体积门禁 + SHA-256 + 启动基准 + 许可包
 ```
 
-## 运行时结构
+产物：`artifacts\portable\Apage.Portable.exe`（唯一必需分发文件，运行时目录结构见下文）。
 
-**便携版目标发布结构（Apage.Portable，签名后 <5MB）**：
+## 🏗️ 技术架构
 
-> 普通 `build\build.ps1` 输出仍包含依赖 DLL；正式分发必须运行 `build\package.ps1`，它只复制经 Costura 合并、原生库内嵌的单个 EXE。以下 `data/` 为运行时生成，不属于分发文件。
+```
+┌──────────────────────────────────────────────┐
+│  Apage.Portable（唯一发布线）                 │
+│  .NET Framework 4.8 + WPF · 单文件 ≈4MB      │
+└──────────────────┬───────────────────────────┘
+                   ▼
+┌──────────────────────────────────────────────┐
+│  Apage.Core (.NET Standard 2.0 共享层)        │
+│  ┌────────────────────────────────────────┐  │
+│  │  ViewModels + Models                    │  │
+│  ├────────────────────────────────────────┤  │
+│  │  Services：AdBlock · Privacy · Storage  │  │
+│  │  ScriptMatcher · Session · Wallpaper    │  │
+│  ├────────────────────────────────────────┤  │
+│  │  WebMessage 通信层（异步，非阻塞）       │  │
+│  ├────────────────────────────────────────┤  │
+│  │  Data Layer（SQLite）                   │  │
+│  └────────────────────────────────────────┘  │
+├──────────────────────────────────────────────┤
+│  Microsoft WebView2 SDK                      │
+├──────────────────────────────────────────────┤
+│  系统 Edge WebView2 Runtime (Chromium)        │
+└──────────────────────────────────────────────┘
+```
+
+| 维度 | 选型 |
+|------|------|
+| 运行时 | .NET Framework 4.8（Win10/11 系统自带，真·免安装） |
+| 单文件方案 | Fody/Costura 托管合并 + 原生库内嵌自解压引导 |
+| UI | WPF（设计令牌驱动的浅/深双主题） |
+| 引擎 | WebView2（系统自带 Chromium），每标签独立内核视图、共享 Environment |
+| 通信 | WebMessage 异步桥（NTP/查找条等本地页面，带 Source 门控） |
+| 存储 | SQLite（书签/历史/下载）+ 原子写 JSON（设置/会话/周统计） |
+| 拦截 | 自研 ABP 兼容引擎：子串索引 + fail-closed 规则边界 + 正则超时 |
+| 共享层 | Apage.Core 纯逻辑（无 Windows 依赖），467 项 xUnit 单测 |
+
+## 📊 项目状态
+
+**已完成（v0.1 功能面）：**
+
+- 多标签浏览：拖拽排序、非活跃休眠、退出保存/启动恢复会话、隐私标签结构性排除
+- 数据层：书签/历史/下载管理（SQLite 安全基座）、Chrome/Edge 书签 HTML 导入
+- 浏览体验：智能地址栏（URL/搜索识别 + 本地建议 + bangs）、Ctrl+F 页内查找、深色主题、壁纸新标签页、站点图标本地缓存（零额外请求）
+- 隐私与拦截：94,646 条离线规则快照、PSL 精确第三方判定、按站点防护覆盖、页级拦截计数 + 盾牌徽章、DNT/GPC、WebRTC IP 防护
+- 工程化：单文件打包链、五信号冒烟、零出站探针、许可合规校验、启动基准，全部接入 CI 门禁
+
+**收尾中（发布前）：**
+
+- 代码签名（SignPath 开源签名计划）与签名后同产物复验
+- 参考机上的启动性能终验（目标：窗口可见 <1 秒）
+
+**v0.1 之后规划：**
+
+- 用户脚本管理器（Tampermonkey 兼容元数据 / GM_* API，一级差异化方向）
+- F12 开发者工具增强 + 反调试过滤（`debugger` 中和，仅调试辅助定位）
+- 化妆规则（`##`）与完整 ABP 引擎、隐私标签、阅读模式、多窗口
+
+## 💻 开发
+
+<details>
+<summary>环境要求与常用命令</summary>
+
+- Windows 10/11（WebView2 Runtime 系统自带）
+- .NET 8 SDK（构建共享层与测试，版本经 `global.json` 固定）
+- Visual Studio 2022（MSBuild + .NET Framework 4.8 目标包）——构建主项目必需
+
+```powershell
+build\preflight.ps1      # 只读环境预检：确认本机可用的构建路线
+build\build.ps1          # Restore + 构建整解（混合 sln 不支持 dotnet build，请使用本脚本）
+dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj   # 467 项 Core 单测
+build\smoke.ps1          # 五信号冒烟 + 数据往返 + 布局探针 + 零出站探针
+build\check-redlines.ps1 # 五条工程红线机械化检查（零遥测/通配符 csproj/隐私默认值等）
+build\check-licenses.ps1 # MIT/MPL/CC 许可全文与隐私资产哈希校验
+build\package.ps1        # 正式单文件打包 + 全部门禁验收 + SHA-256 + legal bundle
+```
+
+> `Apage.sln` 是「旧式 .NET FX 4.8 + SDK 风格」混合解决方案，`dotnet build Apage.sln` 会失败——这是已知约束，`build\build.ps1` 已自动处理 MSBuild 定位与 SDK 路径回退。
+
+</details>
+
+**运行时目录结构**（`data/` 等在运行时生成，数据跟程序走）：
 
 ```
 Apage/
-├── Apage.Portable.exe     # 目标：唯一必需分发文件（.NET FX 4.8 框架依赖）
+├── Apage.Portable.exe     # 唯一必需分发文件
 ├── data/
-│   ├── settings.json      # 设置（原子写 JSON）
+│   ├── settings.json      # 设置（原子写）
 │   ├── session.json       # 会话保存/恢复
-│   ├── privacy-stats.json # 周隐私统计
-│   ├── adblock/           # 用户本地规则；内置 PSL/规则快照嵌入 EXE
-│   └── webui/             # 新标签页本地资产（运行时抽取）
+│   ├── privacy-stats.json # 周拦截统计（纯本地）
+│   └── adblock/           # 用户自定义规则（内置快照嵌在 EXE 里）
 ├── wallpapers/            # 用户壁纸
-└── cache/                 # 仅纯便携模式；默认缓存位于宿主机 %TEMP%\Apage\cache
+└── cache/                 # 仅纯便携模式；默认缓存在宿主机 %TEMP%
 ```
 
-**桌面版（Apage.Desktop，~50MB，暂缓，PMF 验证后条件启动）**：
+## 🙏 致谢
 
-```
-Apage/
-├── Apage.Desktop.exe      # 单文件可执行（.NET 8 自包含）
-├── data/                  # 同便携版
-├── wallpapers/            # 同便携版
-└── cache/                 # 同便携版
-```
+- 架构轻量方案参考 [ZZZ 浏览器](https://github.com/zengjiangy/ZZZ)
+- 「已知限制」的预期管理做法参考 Helium
+- 拦截规则来自 [EasyList / EasyPrivacy](https://easylist.to/)（CC BY-SA 3.0）；第三方域名判定基于 [Public Suffix List](https://publicsuffix.org/)（MPL-2.0）
 
-## 开发
+## 📄 许可证
 
-```bash
-# 环境要求
-# - Windows 10/11（WebView2 Runtime 已预装）
-# - .NET 8 SDK（构建 Apage.Core 共享层，版本经 global.json 固定）
-# - Visual Studio 2022（MSBuild + .NET Framework 4.8 目标包）
-```
+Apage 源代码采用 **MIT**（见 [LICENSE](LICENSE)）。
 
-**构建**：`Apage.sln` 是「旧式 v4.8 + SDK 风格」混合解决方案，`dotnet build Apage.sln` **不支持**（会失败），主项目必须用 VS 2022 的 MSBuild。仓库提供的封装脚本 [`build/build.ps1`](build/build.ps1) / [`build/build.sh`](build/build.sh) 会自动经 vswhere 定位 MSBuild、按需设置 `MSBuildSDKsPath` 并关闭 workload 解析器，**这是受支持的构建入口**：
+随包隐私数据保持各自许可：Public Suffix List 为 **MPL-2.0**，EasyList/EasyPrivacy 过滤快照按 **CC BY-SA 3.0** 分发。完整归属与许可全文见 [THIRD-PARTY-NOTICES.txt](licenses/THIRD-PARTY-NOTICES.txt) 与 [licenses/](licenses/) 目录；每次打包还会生成独立的 `artifacts\legal\` 发布许可包。
 
-```powershell
-# PowerShell（推荐）：Restore + 构建整个解决方案（默认 Release）
-build\build.ps1
-build\build.ps1 -Configuration Debug
-```
+---
 
-```bash
-# Git Bash：一条命令验证（内部转调 build/build.ps1）
-build/build.sh            # 默认 Release
-build/build.sh Debug
-```
+<div align="center">
 
-**冒烟验证**：构建成功后可一条命令跑发布线冒烟检查（[`build/smoke.ps1`](build/smoke.ps1)）：以 `--smoke` 模式拉起 Apage.Portable，验证 **应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 / SQLite 安全初始化 / PSL 与规则快照加载** 五个信号，并在首帧后真实构建设置与数据窗口、执行书签/历史数据往返、Ctrl+F/Popup 布局探针与 NTP getConfig 来源门控探针；通过后自动运行首启零非白名单出站探针（红线：零后台请求）；CI 在 portable 构建步骤之后自动运行：
+**一个页面，干净打开。**
 
-```powershell
-build\smoke.ps1                       # 默认 Release
-build\smoke.ps1 -Configuration Debug
-```
-
-**正式单文件打包**：`build\package.ps1` 校验许可，构建并复制唯一必需 EXE 到 `artifacts\portable\`，硬性检查 4.25MB 开发目标/5MB 上限、隐私资产哈希、五信号 smoke 和启动基准，并输出 SHA-256、`artifacts\legal\` 与 release manifest：
-
-```powershell
-build\package.ps1
-build\package.ps1 -SkipBuild        # 已构建时只重新打包/验收
-```
-
-**启动基准**：真实 `Apage.Portable` 的窗口可见、WebView2、SQLite 与隐私资产就绪可分离测量；基准在 `artifacts/` 的隔离副本中运行并启用便携缓存，不读取或清理真实 `data/`。对正式单文件运行时只复制 EXE：
-
-```powershell
-build\startup-bench.ps1 -ExePath artifacts\portable\Apage.Portable.exe `
-  -Iterations 3 -OutputDirectory artifacts\release-startup -WarmMedianLimitMs 1000
-```
-
-脚本等价于以下手动步骤：
-
-```powershell
-# 方式 A：VS Installer 已勾选「.NET SDK」组件（推荐，一劳永逸）
-msbuild Apage.Portable\Apage.Portable.csproj /t:Restore,Build /p:Configuration=Release
-
-# 方式 B：VS 缺少「.NET SDK」组件时，临时指定 SDK 路径（须用 .NET 8 SDK，10.x 会触发 NETSDK1216）
-$env:MSBuildSDKsPath = "C:\Program Files\dotnet\sdk\8.0.423\Sdks"
-$env:MSBuildEnableWorkloadResolver = "false"
-msbuild Apage.Portable\Apage.Portable.csproj /t:Restore,Build /p:Configuration=Release
-
-# 单独构建 Apage.Core（SDK 风格，dotnet CLI 直接可用）
-dotnet build Apage.Core/Apage.Core.csproj -c Release
-
-# 发布便携版（D1 已完成；签名与最终复验属 S4）
-# .NET FX 4.8 不支持 PublishSingleFile；生产使用 Costura + NativeBootstrap
-# build\build.ps1 的 bin 目录仍是多文件调试布局；正式分发以 package.ps1 的单 EXE 为准
-# 发布产物：artifacts\portable\Apage.Portable.exe（1 文件，当前 4,190,208 字节，版本 0.1.0.0）
-```
-
-> **发布说明**：v0.1~v1.0 单押便携版（Apage.Portable），基于 .NET Framework 4.8（Win10/11 系统自带）实现真即插即用（前提：目标机已装 WebView2 Runtime）。桌面版（Apage.Desktop，.NET 8 自包含）暂缓，仅便携版验证 PMF 后条件启动。Apage.Core（.NET Standard 2.0）保留分层以备未来衍生。详见 [docs/product-design.md](docs/product-design.md)。
-
-## 文档
-
-- [产品设计文档](docs/product-design.md) — 竞品分析、功能设计、架构细节
-- [前端设计文档](docs/frontend-design.md) — 设计系统、UI 规范、交互与动效
-- [开发路线图](docs/roadmap.md) — 阶段规划与历史状态
-- [v0.1 发布收敛计划](docs/design/2026-10-28-v01-release-convergence.md) — 剩余任务、依赖顺序与质量门禁（当前执行依据）
-- [S2 第一批实施记录](docs/design/2026-10-29-s2-first-slice.md) — D1/A1/B1/C1 实测证据与已知限制
-- [A2 PSL 与离线规则快照](docs/design/2026-10-29-a2-psl-rule-snapshot.md) — 第三方判定、规则筛选、许可与体积证据
-- [D2 发布工程记录](docs/design/2026-10-29-d2-release-engineering.md) — 可重复打包、启动门禁、许可包与 CI
-- [B2/A3 实施记录](docs/design/2026-10-29-b2-data-a3-rule-update.md) — 数据垂直切片、书签导入、下载跟踪、手动规则更新
-- [发布签名手册](docs/release/signing.md) — SignPath 申请、签名工作流与签名后复验
-- [S0 基线与共享契约](docs/design/2026-10-28-s0-baseline-contracts.md) — 发布口径和数据/隐私契约
-- [S1 单文件与启动验证](docs/spikes/results/single-file.md) — spike 证据、体积预算与复现命令
-- [脚本管理器设计](docs/script-manager.md) — 用户脚本运行时与管理器（v0.1 后）
-
-## 致谢
-
-架构设计参考了 [ZZZ 浏览器](https://github.com/zengjiangy/ZZZ) 的轻量方案。
-
-## 许可证
-
-Apage 源代码采用 MIT（见 [LICENSE](LICENSE)）。
-
-随包隐私数据保持各自许可：Public Suffix List 为 **MPL-2.0**；EasyList/EasyPrivacy 过滤快照按 **CC BY-SA 3.0** 分发。完整归属与许可全文见 [THIRD-PARTY-NOTICES.txt](licenses/THIRD-PARTY-NOTICES.txt)、[MIT](licenses/LICENSE-MIT.txt)、[MPL-2.0](licenses/LICENSE-MPL-2.0.txt) 与 [CC BY-SA 3.0](licenses/LICENSE-CC-BY-SA-3.0.txt)。`build\package.ps1` 还会生成独立的 `artifacts\legal\` 发布包。
+</div>
