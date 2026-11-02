@@ -232,9 +232,11 @@
 
 - 星愿的差异化太窄（主页+漫画），Vivaldi 的太复杂（什么都能定制）
 
-**Apage 的标签**：壁纸美学 + 隐私统计 + Portable 即插即用
+**Apage 的标签**：壁纸美学 + 隐私盾拦截计数 + Portable 即插即用
 
-> 注：单纯的壁纸容易被复制。更强的记忆点是新标签页上的**隐私拦截统计**（"本周已拦截 M 个广告"）——Brave 靠这个小卡片建立了极强的用户感知，且数据全本地，与零联网原则不冲突。壁纸负责美，可验证的拦截统计负责价值感；无法验证的“追踪数”不纳入。
+> 注：单纯的壁纸容易被复制。更强的记忆点是**可验证的隐私拦截统计**——Brave 靠这类计数建立了极强的用户感知，且数据全本地，与零联网原则不冲突。壁纸负责美，可验证的拦截计数负责价值感；无法验证的“追踪数”不纳入。
+>
+> 口径更正（2026-11-02）：该计数原计划放新标签页统计卡，因首屏复杂度与证据口径收敛，**统计卡已下线**（决策 #25）；计数入口收敛到隐私盾面板「本周拦截（本机统计）」，数据与落盘机制不变。
 
 ---
 
@@ -376,6 +378,8 @@ public sealed class AppServices : IDisposable
 }
 ```
 
+> **现状标注（2026-11-02）**：§4.2/§4.3 为「目标结构」，部分未建立：ViewModels/ 仅 Placeholder.cs；ScriptManager 运行时（ScriptManagerService / ScriptBridgeService / ScriptStorage / ScriptHttpClient）、Apage.Watchdog、Apage.Desktop 尚未创建；实际 AppServices 属性为 Settings / Session / PrivacyStats / SingleInstance / LocalLog / Database / Bookmarks / History / Downloads / PrivacyDirectory，广告拦截经 AdBlockRuleProvider + RuleUpdateService 提供（命名映射：AdBlockManager→AdBlockRuleProvider+RuleUpdateService、PrivacyService→PrivacyStatsService+ThirdPartyDetector+PrivacyAssets、FaviconCacheService→FaviconStore、SearchSuggestionService→OmniboxSuggestionService、Configuration/Settings.cs→Models/AppSettings.cs）。
+
 ### 4.4 WebMessage 通信（替代 HostObject，不采用 WebSocket）
 
 ```
@@ -456,8 +460,6 @@ WebMessage 通道只存在于我们自己的 WebView2 进程内：无 TCP 端口
 │    │Google│ │GitHub│ │ B站  │ │ 知乎 │ │ +  │ │
 │    └──────┘ └──────┘ └──────┘ └──────┘ └────┘ │
 │                                                 │
-│         🛡 本周已拦截 342 个广告                    │
-│                                                 │
 │                    14:32                        │
 │                  星期六                          │
 │               2026年7月19日                      │
@@ -468,7 +470,7 @@ WebMessage 通道只存在于我们自己的 WebView2 进程内：无 TCP 端口
 - 壁纸：本地图片 / 拖拽设置 / 内置精选
 - 毛玻璃搜索框（backdrop-filter: blur）
 - 快捷方式可编辑/排序/删除
-- **隐私统计卡片（v0.1 首发差异化）**：本周广告拦截计数（纯本地数据，强化隐私心智；不再展示无法验证的追踪数）
+- **隐私盾本周拦截计数**：广告规则拦截次数按周统计（纯本地数据，强化隐私心智；不展示无法验证的追踪数）。入口在隐私盾面板——新标签页统计卡已于 2026-11-02 下线（决策 #25）
 - 时钟 + 日期
 
 ### 5.2 隐私保护
@@ -482,8 +484,7 @@ public class PrivacyDefaults
     public bool SendDoNotTrack = true;               // 默认开（声明性，多数站点忽略）
     public bool SendGlobalPrivacyControl = true;     // 默认开（部分法域有法律效力）
     public bool WebRTCIPProtection = true;           // 默认开：防 IP 泄露，不断连（见下）
-    public bool ClearOnExit = false;                 // 可选
-    public bool AutoDeleteCookies = false;           // 可选
+    public bool ClearOnExit = false;                 // 可选（清理编排见隐私数据清理，未实现前不展示为可用设置）
     public bool OnlineSearchSuggestions = false;     // 默认关：联网建议会把击键发给引擎
 }
 ```
@@ -503,20 +504,33 @@ public class PrivacyDefaults
 **更新机制**（与"零后台请求"原则对齐）：
 
 1. 安装包内置一份规则快照，保证开箱即用；
-2. 设置页提供「立即更新规则」按钮（用户触发的网络请求）；
-3. 「启动时自动更新」为可选开关，**默认关闭**，开启时明确提示会产生后台请求；
-4. 关于页列出程序可能发起的全部网络请求清单，透明可审计，共三条：规则更新（用户点击触发）、联网搜索建议（默认关）、**搜索引擎图标一次性抓取**（默认开，可在设置关闭；仅对白名单内的四个引擎各抓一次 favicon.ico）。
+2. 设置页提供「立即更新规则」按钮（用户触发的网络请求）；**没有启动时/定时/静默自动更新**，未点击时规则子系统零联网；
+3. 网络请求清单（透明可审计，已实现两条）：规则更新（用户点击触发，HTTPS）、**搜索引擎图标一次性抓取**（默认开，可在设置关闭；仅对白名单内的四个引擎各抓一次 favicon.ico）。清单由本文档与 README 承载——「关于」页尚未实现，不谎称已有；联网搜索建议为规划项（默认关、当前无消费方）。
 
 > **站点图标口径（2026-11-02 实现）**：图标有两条来源，都不经过任何第三方图标服务。
 >
 > **来源一（零请求）**：用户访问站点时，内核本来就会取回 favicon，宿主用 `GetFaviconAsync` 把同一份字节落盘到 `{数据目录}\favicons`，新标签页从本地读。
 >
-> **来源二（一次性、受控）**：为了让首屏四个引擎图标开箱可用，新标签页会请求 `https://<引擎主机>/favicon.ico` 各一次。边界：仅限百度 / 必应 / Google / DuckDuckGo 的主机别名（`SearchEngineHosts` 白名单，页面无法指定任意主机）；仅当本地无缓存时触发；仅 HTTPS、不跟随重定向、6 秒超时、单次 ≤64KB、只接受图片魔数；每个主机每会话最多尝试一次；命中或失败后落缓存，不再请求。设置里「获取搜索引擎图标」可关闭，关闭后完全不发请求。
+> **来源二（一次性、受控）**：为了让首屏四个引擎图标开箱可用，新标签页会请求 `https://<引擎主机>/favicon.ico` 各一次。边界：仅限百度 / 必应 / Google / DuckDuckGo 的主机别名（`SearchEngineHosts` 白名单，页面无法指定任意主机）；仅当本地无缓存时触发；仅 HTTPS、不跟随重定向、6 秒超时、单次 ≤64KB、只接受图片魔数；每个主机每会话最多尝试一次；命中后落缓存不再请求；失败仅在本次会话内不重试、不落盘，重启后会再次尝试一次。设置里「获取搜索引擎图标」可关闭，关闭后完全不发请求。
 >
 > 因此：
 > - **不新增任何请求**：不请求 `favicon.ico`、不调用第三方图标服务、不做远程代理；
 > - **用户快捷方式仍不抓取**：只有引擎主机走来源二，用户自己添加的站点一律靠访问获取，没有图标时回落为品牌色字标；
 > - 抓取结果统一重编码为 32px PNG 再入库，避免超大原图与格式不一致；缓存上限 256 条，按最后写入时间裁剪；目录损坏或不可写只影响图标显示，不影响浏览。
+
+#### 能力边界声明（2026-11-02，唯一事实源）
+
+Apage 的隐私叙事明确止步于「网络层拦截 + 头部信号 + WebRTC IP 防护」。以下边界必须如实披露，任何新功能不得超出：
+
+| 边界 | 事实 |
+|---|---|
+| Apage 自身 | 零遥测、零后台请求；仅两条用户触发出站路径（规则更新、引擎图标抓取），由 `build\check-redlines.ps1` 文件级白名单 + `build\outbound-probe.ps1` 首启零非白名单出站门禁双重锁死 |
+| WebView2 Runtime | 微软文档明确其「无论 Windows 诊断数据设置如何」都会收集性能/可靠性所需数据，宿主仅能控制 SmartScreen 与自定义崩溃报告——**不受 Apage 控制**，本行即披露义务 |
+| 指纹防护 | 不提供。WebGL/Canvas/WebAudio/WebGPU 参数在 WebView2 壳层不可干预，不做「Brave 级指纹防护」表述 |
+| 恶意软件黑名单 | 不提供。ABP 引擎只做广告/跟踪规则拦截；SmartScreen 信誉检查默认保留，关闭它是设置里的显式取舍（默认关） |
+| 拦截能力边界 | ABP 子串索引可执行的网络规则子集；含 `$` 修饰符条件规则 fail-closed 拒收；化妆规则（`##`）后置 Phase 7+ |
+
+新增任何隐私相关能力必须同步更新本表（AGENTS.md 红线 4 披露义务）。
 
 #### 第三方 Cookie 隔离（v0.1 不提供，已纠偏）
 
@@ -526,7 +540,7 @@ public class PrivacyDefaults
 - 产品处理：`BlockThirdPartyCookies` 保留为旧 JSON 兼容字段且默认 `false`；设置、请求管线、隐私统计、NTP 与隐私盾全部移除该能力，不作超额宣传。
 - WebView2 Tracking Prevention 仍为默认 Balanced（按已知追踪器名单工作），不等价于“第三方 Cookie 全阻断”，因此不以此替代承诺。
 - PSL 仍随包保留，供未来受支持平台能力或规则来源分析使用；当前不产生“已剥离 Cookie”的运行时声明。
-- **隐私统计卡片口径**（新标签页「本周已拦截 N 个广告」）：广告数 = 规则拦截次数，按周统计（周一 00:00 本地时间边界），正常退出时原子写 `{数据目录}\privacy-stats.json`；追踪数已随无效能力移除。
+- **隐私盾拦截计数口径**（隐私盾面板「本周拦截（本机统计）」）：广告数 = 规则拦截次数，按周统计（周一 00:00 本地时间边界），正常退出时原子写 `{数据目录}\privacy-stats.json`；追踪数已随无效能力移除。
 - 决策与实现细节见 [P0/P1 硬化记录](design/2026-11-02-p0-p1-hardening.md)。
 
 #### 追踪保护头
@@ -546,7 +560,7 @@ var options = new CoreWebView2EnvironmentOptions {
 };
 ```
 
-阻止本地/公网 IP 经 WebRTC 泄露，同时保留音视频通话能力；设置中提供按站点开关。
+阻止本地/公网 IP 经 WebRTC 泄露，同时保留音视频通话能力；当前仅全局开关，按站点开关尚未实现（roadmap Phase 7+）。
 
 #### 地理位置模拟
 
@@ -706,7 +720,7 @@ var options = new CoreWebView2EnvironmentOptions {
 | 卖点 | 便携版（主力） | 桌面版（暂缓，未来可选） | 竞品对比 |
 |------|--------------|----------------------|---------|
 | 单文件体积 | <5MB | ~50MB | 便携版与 ZZZ 同级，Helium 的 1/20 |
-| 壁纸 + 隐私统计新标签页 | ✓（v0.1 首发） | ✓ | 无竞品做好 |
+| 壁纸新标签页 + 隐私盾拦截计数 | ✓ | ✓ | 无竞品做好 |
 | Portable 即插即用 | ✓（.NET FX 4.8 系统自带，前提装 WebView2 Runtime） | — | 便携版与 ZZZ 同级 |
 | 隐私默认全开 | ✓ | ✓ | Helium 同级 |
 | 无偏见广告拦截 | ✓ | ✓ | Brave 有白名单 |

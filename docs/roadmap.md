@@ -2,7 +2,7 @@
 
 > 内部文档 | 更新：2026-11-02
 >
-> 当前执行状态：**S0–S3 功能包已完成，P0/P1 硬化与自动 S4 验证已落地；正式打包通过，但首启仍超 1s，完整发布未放行**。干净工作区 `137bddb` 产物 **4,068,352 字节 / 1 文件**，Core 单测 **305 绿**，五条红线、五信号 smoke、数据往返与布局/NTP 探针通过。正式单文件 3 轮：首启 1026.2ms、热启中位 959.25ms（门禁 <1000ms，仅热启口径）；仍需参考机、真机点击、exFAT 与签名复验。
+> 当前执行状态：**S0–S3 功能包已完成，P0/P1 硬化与自动 S4 验证已落地；正式打包通过，但首启仍超 1s，完整发布未放行**。干净工作区 `137bddb` 产物 **4,068,352 字节 / 1 文件**（体积/哈希以 artifacts 证据文件为准），Core 单测 **364 绿**，五条红线、五信号 smoke、数据往返、布局/NTP 探针与首启零非白名单出站探针通过。`db02fdf` 起 favicon/品牌图标切片、`c4960ad` 内核参数收口（R1）、`93bc030` 出站门禁（R2）已落地；favicon 资产合入后尚未重新打包称重。正式单文件 3 轮：首启 1026.2ms、热启中位 959.25ms（门禁 <1000ms，仅热启口径）；仍需参考机、真机点击、exFAT 与签名复验。
 >
 > 剩余任务以 [v0.1 发布收敛计划](design/2026-10-28-v01-release-convergence.md) 第九节为执行清单；P0/P1 硬化见 [硬化记录](design/2026-11-02-p0-p1-hardening.md)，Cookie 探针见 [结果](spikes/results/cookie-privacy.md)，S4 启动复验见 [记录](design/2026-11-02-s4-startup-recheck.md)。
 >
@@ -172,7 +172,7 @@
 - [x] 新标签页 UI（壁纸+搜索+快捷方式+时钟）——v1.0 接线：webui 资产抽取到 {数据目录}\webui，空白标签经 file:// 导航；搜索/快捷方式经 ntp 桥交宿主导航（Source 门控）
 - [x] 壁纸设置（选择本地图片 / 拖拽设置）——6 张内置渐变 + 本地图片选择 + 拖入即设；localStorage 持久（file:// 下禁用时自动降级）
 - [x] 搜索引擎切换——新标签页内循环切换（百度→必应→Google）；Omnibox 引擎仍取设置项 SearchEngine
-- [x] 隐私统计卡片（本周广告拦截计数，纯本地数据）——v1.0 起按周（周一 00:00 本地）统计广告规则拦截；2026-11-02 起移除无有效能力支撑的“追踪”计数，经 getStats 桥实时下发；openSettings/addShortcut 桩待 Phase 6/4 后续
+- [x] 隐私拦截计数（本周广告规则拦截次数，纯本地数据）——v1.0 起按周（周一 00:00 本地）统计；2026-11-02 起移除无有效能力支撑的“追踪”计数；**新标签页统计卡与 getStats 桥已下线（决策 #25）**，计数入口收敛到隐私盾面板「本周拦截（本机统计）」，统计口径与落盘机制不变
 
 **交付物**：带壁纸与隐私统计的新标签页，拖拽即可设置壁纸
 
@@ -293,7 +293,7 @@
 | 3 | 数据存储 | 新增书签/历史/下载使用 SQLite；设置/会话/周统计继续 JSON | 结构化数据需要事务与查询；小状态原子写已足够，v0.1 不做同期旧数据迁移 |
 | 4 | 广告拦截 | ABP 引擎 | 规则兼容，社区生态 |
 | 5 | 扩展支持 | 用户脚本优先；本地侧载扩展（v0.1 不含） | WebView2 扩展为本地侧载、须 Environment 创建时显式开启 `AreBrowserExtensionsEnabled`、无商店直连；2026-10-26 实测 MV3/MV2 最小样本均可装，「仅 MV3 子集」旧口径不成立（见 [spikes/results/extension.md](spikes/results/extension.md)）；GM_* 才是真差异化 |
-| 6 | 壁纸系统 | 简单 + 拖拽 + 隐私统计卡片 | 差异化，不复杂；统计卡片强化隐私心智 |
+| 6 | 壁纸系统 | 简单 + 拖拽 + 隐私盾拦截计数 | 差异化，不复杂；拦截计数强化隐私心智（统计卡 2026-11-02 下线，决策 #25） |
 | 7 | 隐私默认 | 全开 | 产品定位决定 |
 | 8 | 运行时分发 | 框架依赖（.NET FX 4.8 系统自带） | 保住 <5MB 单文件；真正依赖是 WebView2 Runtime（R1，前提诚实化，不静默联网下载），非 .NET |
 | 9 | 隐私标签隔离 | 共享隔离 Environment | 每标签独立 Environment = 每标签一套进程，内存目标无法达成 |
@@ -312,6 +312,9 @@
 | 22 | 第三方域名判定 | 随包 PSL 快照求 eTLD+1；失败回退末两标签 | 精确处理 `co.uk` 等多级后缀；IP/localhost/非法输入仍按漏判方向；v0.1 不联网更新 PSL |
 | 23 | 内置规则快照边界 | 仅无 `$` 修饰符的 URL 网络规则；regex/化妆/条件规则跳过并记账 | 引擎不能完整求值的规则不得退化后宽泛拦截；快照按 CC BY-SA 3.0 分发并随包许可 |
 | 24 | 第三方 Cookie 防护口径 | v0.1 不提供；旧字段默认关、无 UI/统计/宣传 | 真机探针证明事件内删除 Cookie 后网络栈仍重新附加；宁可诚实缺失，不保留“假防护”。见 [cookie-privacy](spikes/results/cookie-privacy.md) |
+| 25 | NTP 统计卡 | 下线；周拦截计数保留在隐私盾面板 | 代码已移除 stats-card 与 getStats 桥；计数口径与落盘不变，文档同步纠偏（[favicon/图标实施记录](design/2026-11-02-favicon-outbound-app-icon.md) 同批次审计发现） |
+| 26 | 内核命令行参数 | 收敛为单一受控常量（BrowserArguments），只传 stock 开关 | ungoogled 清单化方法论；非 stock 开关被内核静默忽略会造成虚假安全感，禁止清单由单测把守，真机探针证实生效（[browser-arguments](spikes/results/browser-arguments.md)） |
+| 27 | 出站验证 | 首启零非白名单出站作为冒烟门禁（outbound-probe.ps1） | 把「零后台请求」从口号变成证据；WebView2 Runtime 诊断端点不可控，加白必须是显式记录动作 |
 
 ---
 
@@ -326,6 +329,6 @@
 | 崩溃清理守护 | ZZZ 的 PrivateDataGuard（外部 watchdog 进程） |
 | 标签休眠 | ZZZ 的 Sleep/SetActive |
 | WebMessage 异步通信 | Apage（替代 ZZZ 的同步 HostObject；WebSocket 方案已否决） |
-| 壁纸系统 + 隐私统计卡片 | Apage 原创 |
+| 壁纸系统 + 隐私盾拦截计数 | Apage 原创 |
 | 脚本管理器（GM_* 运行时 + 管理 UI） | Apage 原创设计（详见 script-manager.md） |
 | F12 DevTools 接入 + 反调试过滤 | WebView2 原生 DevTools（F12/Ctrl+Shift+I/OpenDevToolsWindow）+ Apage 原创注入层（复用脚本注入管线，Phase 7d） |

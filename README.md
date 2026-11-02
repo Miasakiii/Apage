@@ -22,8 +22,21 @@
 - **隐私资产已闭环**：PSL `2026-10-28` 版本；内置 EasyList/EasyPrivacy 快照 **94,646 条**通过 SHA-256 校验，MIT/MPL/CC 许可全文随包；运行时零自动更新请求。
 - **启动指标（2026-11-02，正式单文件 3 轮）**：首启 ContentRendered **1026.2ms**，热启中位 **959.25ms**。热启通过本机 1000ms 打包门禁，但首启仍超过 1 秒，且当前不是稳定参考机；完整发布验收未通过。
 - **数据、查找与规则更新已闭环**：书签/历史/下载落 SQLite（隐私标签不记历史），支持 Chrome/Edge 书签 HTML 导入；地址栏本地建议与 Ctrl+F 页内查找可用；规则更新仅在设置里手动点击触发，逐跳 HTTPS、全程串行、校验后原子替换，热更新保留 `adblock/*.txt` 用户规则。
+- **数字锚点约定**：体积、SHA-256 与启动指标以最近一次 `build\package.ps1` 的 `artifacts/` 证据文件（`portable.metrics.json` / `portable.sha256` / `release-startup/metrics.json`）为准；本文中的数字均为对应提交的证据快照（如 4,068,352 字节 = 干净工作区 `137bddb`）。favicon/图标切片（`db02fdf` 起）合入后尚未重新打包称重，下次 `build\package.ps1` 后同步更新。
 - **站点图标**：新标签页优先显示站点自带 favicon。用户访问站点时由 WebView2 已取回的图标直接落盘（零额外请求）；四个搜索引擎图标为开箱可用，会在本地无缓存时各抓取一次 `favicon.ico`（HTTPS、仅白名单主机、可在设置关闭）。用户自己添加的站点不做抓取，无图标时回落品牌色字标（[证据](docs/spikes/results/favicon-cache.md)）。
 - **证据与后续顺序**：见 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)、[S4 硬化验证](docs/design/2026-11-02-s4-hardening-validation.md)、[Cookie 探针](docs/spikes/results/cookie-privacy.md)、[S4 启动复验记录](docs/design/2026-11-02-s4-startup-recheck.md)、[B2/A3 实施记录](docs/design/2026-10-29-b2-data-a3-rule-update.md)、[D2 发布工程记录](docs/design/2026-10-29-d2-release-engineering.md)、[签名手册](docs/release/signing.md)、[A2 实施记录](docs/design/2026-10-29-a2-psl-rule-snapshot.md)、[S2 第一批实施记录](docs/design/2026-10-29-s2-first-slice.md)、[S1 验证结果](docs/spikes/results/single-file.md) 与 [v0.1 发布收敛计划](docs/design/2026-10-28-v01-release-convergence.md)。
+
+## 已知限制（诚实口径）
+
+与 Helium 的预期管理做法对齐：明确说清不做什么、什么不受我们控制。
+
+- **WebView2 Runtime 自身诊断数据不可控**：微软文档明确其「无论 Windows 诊断数据设置如何」都会收集性能/可靠性所需数据，宿主应用只能控制 SmartScreen 与自定义崩溃报告。Apage 的「零遥测」覆盖 Apage 自身代码（出站路径经 `build\check-redlines.ps1` 文件级白名单 + `build\outbound-probe.ps1` 首启零非白名单出站门禁双重锁死），不覆盖 Runtime 自身。
+- **无指纹防护**：WebGL/Canvas/WebAudio/WebGPU 参数在 WebView2 壳层不可干预；隐私能力止步于「网络层拦截 + 头部信号（DNT/GPC）+ WebRTC IP 防护」。
+- **无恶意软件黑名单**：ABP 引擎只做广告/跟踪规则拦截；SmartScreen 信誉检查默认保留。
+- **拦截能力边界**：ABP 子串索引可执行的网络规则子集（含 `$` 修饰符条件规则 fail-closed 拒收）；化妆规则（`##`）后置 Phase 7+；「立即更新规则」之外没有任何自动/静默更新。
+- **站点图标**：未访问过的用户站点没有图标（不联网补图）；引擎图标抓取失败仅在当次会话内不重试。
+- **WebView2 Runtime 是即插即用前提**：Win11 默认预装；未安装时给出中文引导面板，不静默联网下载。
+- **平台**：仅 Windows 10/11 x64 单文件；未代码签名前会触发 SmartScreen 提示（SignPath 申请属 S4）。
 
 ## 技术栈
 
@@ -131,7 +144,7 @@ build/build.sh            # 默认 Release
 build/build.sh Debug
 ```
 
-**冒烟验证**：构建成功后可一条命令跑发布线冒烟检查（[`build/smoke.ps1`](build/smoke.ps1)）：以 `--smoke` 模式拉起 Apage.Portable，验证 **应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 / SQLite 安全初始化 / PSL 与规则快照加载** 五个信号，并在首帧后真实构建设置与数据窗口、执行书签/历史数据往返、Ctrl+F/Toast 布局探针与 NTP getStats 来源门控探针；CI 在 portable 构建步骤之后自动运行：
+**冒烟验证**：构建成功后可一条命令跑发布线冒烟检查（[`build/smoke.ps1`](build/smoke.ps1)）：以 `--smoke` 模式拉起 Apage.Portable，验证 **应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 / SQLite 安全初始化 / PSL 与规则快照加载** 五个信号，并在首帧后真实构建设置与数据窗口、执行书签/历史数据往返、Ctrl+F/Popup 布局探针与 NTP getConfig 来源门控探针；通过后自动运行首启零非白名单出站探针（红线：零后台请求）；CI 在 portable 构建步骤之后自动运行：
 
 ```powershell
 build\smoke.ps1                       # 默认 Release

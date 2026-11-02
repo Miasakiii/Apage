@@ -80,6 +80,10 @@
                                    FontSize="{DynamicResource Apage.FontSize.Xs}"
                                    Foreground="{DynamicResource Apage.Brush.TextTertiary}"
                                    Text="第三方 Cookie 隔离：当前 WebView2 无可靠阻断入口，本版本不提供该项能力，也不计入追踪统计。"/>
+                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
+                                   FontSize="{DynamicResource Apage.FontSize.Xs}"
+                                   Foreground="{DynamicResource Apage.Brush.TextTertiary}"
+                                   Text="能力边界：Apage 自身零遥测、零后台请求（出站白名单见产品文档 §5.2）；WebView2 Runtime 自身的诊断数据不受 Apage 控制；不提供指纹防护与恶意软件黑名单；SmartScreen 信誉检查默认保留。"/>
 
                         <Grid Margin="0,14,0,0">
                             <Grid.ColumnDefinitions>
@@ -89,7 +93,7 @@
                             <StackPanel>
                                 <TextBlock Text="发送 Do Not Track"
                                            Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
-                                <TextBlock Text="声明性请求头 DNT: 1；即时生效"
+                                <TextBlock Text="声明性请求头 DNT: 1；即时生效。多数站点会忽略，属声明性信号，不构成强制拦截"
                                            Margin="0,2,0,0"
                                            FontSize="{DynamicResource Apage.FontSize.Xs}"
                                            Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
@@ -107,7 +111,7 @@
                             <StackPanel>
                                 <TextBlock Text="发送 Sec-GPC"
                                            Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
-                                <TextBlock Text="声明性请求头 Sec-GPC: 1；即时生效"
+                                <TextBlock Text="声明性请求头 Sec-GPC: 1；即时生效。部分法域有法律效力，同样不构成强制拦截"
                                            Margin="0,2,0,0"
                                            FontSize="{DynamicResource Apage.FontSize.Xs}"
                                            Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
@@ -125,7 +129,7 @@
                             <StackPanel>
                                 <TextBlock Text="WebRTC IP 泄露防护"
                                            Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
-                                <TextBlock Text="限制非代理 UDP；重启 Apage 后生效"
+                                <TextBlock Text="阻止本地/公网 IP 经 WebRTC 泄露，不断连会议类网站；限制非代理 UDP；重启 Apage 后生效"
                                            Margin="0,2,0,0"
                                            FontSize="{DynamicResource Apage.FontSize.Xs}"
                                            Foreground="{DynamicResource Apage.Brush.Warning}"/>

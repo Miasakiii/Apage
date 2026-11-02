@@ -55,7 +55,7 @@ dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj
 # 发布线冒烟验证（需先 build\build.ps1 构建成功）：以 --smoke 模式拉起 Apage.Portable，
 # 验证 应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 / SQLite 安全初始化 /
 # PSL 与内置规则快照加载 五信号，并真实构建设置窗口、执行数据往返、
-# Ctrl+F/Toast 布局探针与 NTP getStats 来源门控探针；CI 在 portable 构建步骤之后自动运行。
+# Ctrl+F/Popup 布局探针与 NTP getConfig 来源门控探针与首启零非白名单出站探针；CI 在 portable 构建步骤之后自动运行。
 build\smoke.ps1
 ```
 
@@ -91,7 +91,7 @@ build\preflight.ps1
 1. **不要把 `Apage.Portable.csproj` 的通配符 `Compile`/`Page` 展开成逐文件条目**。通配符是故意的，让并行智能体加 `.cs`/`.xaml` 无需改 csproj（见该文件注释）。新增源码/资源直接放目录即可被拾取；`App.xaml` 是 `ApplicationDefinition`，已从 `Page` glob 排除。
 2. **隐私默认全开是产品红线**（`AppSettings` 默认值）：`SendDoNotTrack` / `SendGPC` / `WebRTCIPProtection` 默认 `true`，`OnlineSearchSuggestions` / `ClearOnExit` / `BlockThirdPartyCookies` 默认 `false`。`FetchEngineIcons` 默认 `true`：这是**唯一默认开启的出站开关**，范围被 `SearchEngineHosts` 白名单锁死为四个引擎主机，改动其默认值需同步 `docs/product-design.md` §5.2 网络请求清单。`BlockThirdPartyCookies` 是旧字段：真机探针已证伪事件级 Cookie 删除（见 `docs/spikes/results/cookie-privacy.md`），不得重新接线或宣传；改其他默认值等于改产品定位，需先对齐 `docs/product-design.md`。
 3. **便携运行时目录**（`data/` `cache/` `wallpapers/`）永不提交（已在 `.gitignore`）。缓存位置遵循风险 R7：默认写宿主机 `%TEMP%\Apage\cache`，纯便携模式才写 exe 同级 `cache/`。
-4. **零遥测 / 零后台请求**：不要引入任何遥测、崩溃上报、云同步或“检查更新”联网逻辑。全仓只允许两条出站路径，且都由 `build\check-redlines.ps1` 以**文件级白名单**锁死：`Apage.Portable/Services/RuleUpdateClient.cs`（手动规则更新，按钮触发）与 `Apage.Portable/Services/FaviconFetcher.cs`（搜索引擎图标一次性抓取，仅 `SearchEngineHosts` 白名单主机、本地无缓存时触发、设置可关闭）。新增出站必须同时改产品文档、红线白名单与冒烟门禁。
+4. **零遥测 / 零后台请求**：不要引入任何遥测、崩溃上报、云同步或“检查更新”联网逻辑。全仓只允许两条出站路径，且都由 `build\check-redlines.ps1` 以**文件级白名单**锁死：`Apage.Portable/Services/RuleUpdateClient.cs`（手动规则更新，按钮触发）与 `Apage.Portable/Services/FaviconFetcher.cs`（搜索引擎图标一次性抓取，仅 `SearchEngineHosts` 白名单主机、本地无缓存时触发、设置可关闭）。新增出站必须同时改产品文档、红线白名单与冒烟门禁。新增任何隐私相关能力必须同步 `docs/product-design.md` §5.2 能力边界声明；WebView2 Runtime 自身的诊断数据不受 Apage 控制（微软文档明示），属已披露边界，不得以「零遥测」笼统宣传。
 5. **`Apage.Core` 保持 netstandard2.0**，不要引入依赖 Windows 或 .NET 8 专有 API 的包（否则破坏未来衍生分层）。
 6. **`Apage.Core/Resources/Privacy/*` 是生成物**（PSL、`builtin-rules.txt`、`privacy-assets.json`），不要手工编辑；用 `tools\SnapshotBuilder\update-snapshot.ps1` 显式更新并同步 `licenses/` 与体积账本。清单中的 SHA-256 不匹配会导致运行时拒绝加载。
 
