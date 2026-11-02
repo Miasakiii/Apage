@@ -235,9 +235,14 @@ public partial class Omnibox : UserControl
         NavigationRequested?.Invoke(this, url);
     }
 
-    /// <summary>把输入解析为可导航 URL：像地址则原样交由归一化补协议，否则用搜索引擎构造查询 URL。</summary>
+    /// <summary>把输入解析为可导航 URL：! bang 先过本地表；像地址则原样交由归一化补协议，否则用搜索引擎构造查询 URL。</summary>
     private string ResolveQuery(string input)
     {
+        // R8 bangs：! 开头先过本地静态表（纯模板展开 + 用户主动导航，非应用出站）
+        var bang = BangResolver.TryResolve(input);
+        if (bang != null)
+            return bang;
+
         if (LooksLikeUrl(input))
             return input; // 交给 BrowserTabView.NormalizeUrl 补 https://
 
