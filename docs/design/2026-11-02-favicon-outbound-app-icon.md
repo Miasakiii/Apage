@@ -41,4 +41,6 @@ v0.1 收敛期发现新标签页快捷方式无图标（回落品牌色字标）
 
 ## 五、体积记账
 
-新增资源：`apage.ico` + `apage-256.png` + `resources/icons/` 源（母版 2048² PNG 约计入源目录，不进单文件）；`Themes/Icons.xaml` 补充图标为 StreamGeometry 文本。出站抓取逻辑为代码不增体积。下次 `build\package.ps1` 需重新称重并更新体积账本（当前 HEAD 5199729 脏工作区产物 4,111,360 字节的事实以 artifacts 证据文件为准）。
+新增资源：`apage.ico` + `apage-256.png` + `resources/icons/` 源（母版 2048² PNG 与 512 预览图只在源目录，不进单文件）；`Themes/Icons.xaml` 补充图标为 StreamGeometry 文本。出站抓取逻辑为代码不增体积。
+
+**2026-11-02 超支与优化（同一日追加）**：图标资产以未优化形态随 csproj `Assets\**` Resource + `ApplicationIcon` 嵌入后，单文件达 4,365,824 字节，超过 4.25MB 开发目标（5MB 硬顶仍过）。处理（收敛计划 §8「再去优化资源格式」）：`resources/icons/optimize_icons.py` 从同一母版重生成——PNG 量化 256 色 + optimize（256px 61,260→8,791 字节）、ICO 只嵌 16/32/48/256 四档（93,679→13,698 字节），便携资产同步替换。重建后单文件 **4,152,832 字节**，回到开发目标内，共省约 213KB。
