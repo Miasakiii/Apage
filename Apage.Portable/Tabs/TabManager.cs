@@ -55,7 +55,7 @@ namespace Apage.Portable.Tabs
         /// <summary>当前标签切换，或当前标签的 URL/标题变化时触发（宿主据此回填地址栏与窗口标题、滚入视区）。</summary>
         public event EventHandler? ActiveTabChanged;
 
-        /// <summary>新标签页动作上浮（openSettings / addShortcut，源自 BrowserTabView.NewTabAction）。</summary>
+        /// <summary>新标签页动作上浮（openSettings，源自 BrowserTabView.NewTabAction）。</summary>
         public event EventHandler<string>? TabAction;
 
         /// <summary>新建标签并（默认）激活；url 为空则为空白标签。新标签始终追加在集合末尾（夸克式）。</summary>

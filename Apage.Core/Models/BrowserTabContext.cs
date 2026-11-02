@@ -38,4 +38,10 @@ public sealed class BrowserTabContext
 
     /// <summary>浏览器内核生命周期服务（创建 / 持有 WebView2 Environment）。未装配时为 <see langword="null"/>。</summary>
     public BrowserLifecycleService? Lifecycle { get; set; }
+
+    /// <summary>
+    /// 站点图标本地缓存（新标签页快捷方式复用已访问站点的 favicon）。
+    /// 未装配时不写盘，标签图标仍可正常显示，只是新标签页回落字标。
+    /// </summary>
+    public FaviconStore? Favicons { get; set; }
 }

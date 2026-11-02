@@ -30,6 +30,20 @@ namespace Apage.Portable.Controls
         public TabStrip()
         {
             InitializeComponent();
+
+            // 「+」跟随最后一个标签：视口尺寸、标签数量、滚动位置任一变化都要重算
+            TabScroller.SizeChanged += (s, e) => UpdateNewTabButtonPosition();
+            Loaded += (s, e) => UpdateNewTabButtonPosition();
+
+            // 容器生成完成才知道最后一个标签的真实宽度（首次恢复多标签会话时用）
+            TabItems.ItemContainerGenerator.StatusChanged += (s, e) =>
+            {
+                if (TabItems.ItemContainerGenerator.Status ==
+                    System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+                {
+                    Dispatcher.BeginInvoke(new Action(UpdateNewTabButtonPosition), DispatcherPriority.Loaded);
+                }
+            };
         }
 
         /// <summary>点击「+」新建标签。</summary>
@@ -45,7 +59,116 @@ namespace Apage.Portable.Controls
         public event Action<int, int>? TabReorderRequested;
 
         /// <summary>绑定标签集合（通常为 TabManager.Tabs）。</summary>
-        public void SetItemsSource(IEnumerable tabs) => TabItems.ItemsSource = tabs;
+        public void SetItemsSource(IEnumerable tabs)
+        {
+            TabItems.ItemsSource = tabs;
+
+            // 数量变化不一定改变 ExtentWidth（未溢出时恒等于视口宽），因此单独监听集合变更
+            if (tabs is System.Collections.Specialized.INotifyCollectionChanged incc)
+            {
+                incc.CollectionChanged -= OnTabsCollectionChanged;
+                incc.CollectionChanged += OnTabsCollectionChanged;
+            }
+        }
+
+        private void OnTabsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            // 容器在下一轮布局后才就位：延后到 Loaded 优先级再算位置
+            Dispatcher.BeginInvoke(new Action(UpdateNewTabButtonPosition), DispatcherPriority.Loaded);
+        }
+
+        // 「+」定位（夸克式）：标签未溢出时紧跟最后一个标签；溢出时切到独立列固定右侧，
+        // 避免遮挡被裁切的标签与其关闭钮。
+        private void UpdateNewTabButtonPosition()
+        {
+            var viewport = TabScroller.ActualWidth;
+            if (viewport <= 0)
+                return;
+
+            var overflow = TabScroller.ExtentWidth > viewport + 0.5;
+            if (overflow)
+            {
+                if (Grid.GetColumn(NewTabButton) != 2)
+                    Grid.SetColumn(NewTabButton, 2);
+                SetNewTabMargin(new Thickness(4, 0, 4, 0));
+                RevealNewTabButton();
+                return;
+            }
+
+            if (Grid.GetColumn(NewTabButton) != 1)
+                Grid.SetColumn(NewTabButton, 1);
+
+            var left = 4.0;
+            var count = TabItems.Items.Count;
+            if (count > 0 &&
+                TabItems.ItemContainerGenerator.ContainerFromIndex(count - 1) is FrameworkElement last &&
+                last.ActualWidth > 0)
+            {
+                // 最后一个标签右边缘（相对滚动区，已含滚动位移；未溢出时位移恒为 0）
+                left = last.TranslatePoint(new Point(last.ActualWidth, 0), TabScroller).X + 4;
+            }
+
+            // 留出右边界余量，避免贴到窗口按钮
+            var maxLeft = viewport - NewTabButton.Width - 4;
+            if (left > maxLeft)
+                left = maxLeft;
+            if (left < 4)
+                left = 4;
+
+            SetNewTabMargin(new Thickness(left, 0, 0, 0));
+            RevealNewTabButton();
+        }
+
+        // 首次定位完成后再显示：避免启动瞬间「+」先叠在第一个标签上再跳位
+        private void RevealNewTabButton()
+        {
+            if (NewTabButton.Visibility != Visibility.Visible)
+                NewTabButton.Visibility = Visibility.Visible;
+        }
+
+        // 只有实际变化才写回，避免 LayoutUpdated 级别的无谓重排
+        private void SetNewTabMargin(Thickness margin)
+        {
+            if (NewTabButton.Margin.Equals(margin))
+                return;
+            NewTabButton.Margin = margin;
+        }
+
+        /// <summary>
+        /// 冒烟专用：校验「+」紧跟最后一个标签（间隙 4–10px）；标签溢出时须落在独立列固定右侧。
+        /// 保证这个位置关系是结构性的，而不是恰好被窗口宽度掩盖。
+        /// </summary>
+        internal bool IsNewTabButtonAdjacentToLastTab(out string detail)
+        {
+            var count = TabItems.Items.Count;
+            var viewport = TabScroller.ActualWidth;
+            var overflow = TabScroller.ExtentWidth > viewport + 0.5;
+
+            if (count == 0)
+            {
+                detail = "no-tabs";
+                return false;
+            }
+
+            if (TabItems.ItemContainerGenerator.ContainerFromIndex(count - 1) is not FrameworkElement last)
+            {
+                detail = "no-container";
+                return false;
+            }
+
+            var lastRight = last.TranslatePoint(new Point(last.ActualWidth, 0), this).X;
+            var buttonLeft = NewTabButton.TranslatePoint(new Point(0, 0), this).X;
+            var gap = buttonLeft - lastRight;
+            var column = Grid.GetColumn(NewTabButton);
+
+            detail = $"tabs={count} overflow={overflow} column={column} " +
+                     $"gap={gap:F1} buttonLeft={buttonLeft:F1} lastRight={lastRight:F1} viewport={viewport:F1}";
+
+            if (overflow)
+                return column == 2;
+
+            return gap >= 2 && gap <= 10;
+        }
 
         /// <summary>把指定标签滚入可视区（新建/激活后调用，杜绝被裁到屏外，回应「走回头路」反馈）。</summary>
         public void ScrollToTab(BrowserTab? tab)
@@ -113,6 +236,9 @@ namespace Apage.Portable.Controls
                 ScrollLeftButton.IsEnabled = e.HorizontalOffset > 0.5;
                 ScrollRightButton.IsEnabled = e.HorizontalOffset < e.ExtentWidth - e.ViewportWidth - 0.5;
             }
+
+            // 视口/内容宽变化与滚动都会影响「+」的位置
+            UpdateNewTabButtonPosition();
         }
 
         private void ScrollLeftButton_Click(object sender, RoutedEventArgs e) =>

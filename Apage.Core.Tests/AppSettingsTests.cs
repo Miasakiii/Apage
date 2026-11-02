@@ -20,6 +20,16 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void Defaults_FetchEngineIcons_IsOn()
+    {
+        // 默认开：新标签页首屏四引擎图标一次到位。
+        // 请求范围被 SearchEngineHosts 白名单锁死，且设置里可关闭（见 SearchEngineHostsTests）。
+        var s = new AppSettings();
+
+        Assert.True(s.FetchEngineIcons);
+    }
+
+    [Fact]
     public void Defaults_UnsupportedThirdPartyCookieClaim_IsOff()
     {
         // 2026-11-02 真机探针：WebResourceRequested 删除 Cookie 后网络栈仍会重新附加。

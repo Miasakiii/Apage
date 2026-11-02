@@ -34,6 +34,14 @@ public sealed record AppSettings
     /// <summary>联网搜索建议（默认关：开启会把击键发给搜索引擎）。</summary>
     public bool OnlineSearchSuggestions { get; set; }
 
+    /// <summary>
+    /// 为新标签页搜索框获取引擎图标（默认开）。
+    /// 仅对白名单内的四个搜索引擎主机各抓一次 favicon.ico（HTTPS、限时限大小），
+    /// 结果落盘后再不请求；关闭后不发任何请求，图标回落字标。
+    /// 与「零后台请求」原则的偏差已在 docs/product-design.md 的网络请求清单中明示。
+    /// </summary>
+    public bool FetchEngineIcons { get; set; } = true;
+
     /// <summary>退出时清理隐私数据（默认关）。</summary>
     public bool ClearOnExit { get; set; }
 }

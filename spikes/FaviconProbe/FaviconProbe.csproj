@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    独立 Spike：验证“用站点自带图标”这条路线在真机上可行——
+    WebView2 在加载页面时本来就会取回 favicon，GetFaviconAsync 能拿到 PNG 字节，
+    落进 FaviconStore 后可按主机名读回并包成 data URL 给新标签页。
+    全程不额外请求 favicon.ico，也不访问任何图标服务。
+    不加入 Apage.sln；构建：dotnet build spikes/FaviconProbe/FaviconProbe.csproj
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Apage.Spikes.FaviconProbe</RootNamespace>
+    <AssemblyName>FaviconProbe</AssemblyName>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Apage.Core\Apage.Core.csproj" />
+  </ItemGroup>
+
+</Project>

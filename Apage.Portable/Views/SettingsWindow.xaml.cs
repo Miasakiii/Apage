@@ -132,6 +132,7 @@ public partial class SettingsWindow : Window
         DntToggle.IsChecked = source.SendDoNotTrack;
         GpcToggle.IsChecked = source.SendGPC;
         WebRtcToggle.IsChecked = source.WebRTCIPProtection;
+        FetchEngineIconsToggle.IsChecked = source.FetchEngineIcons;
         PortableCacheToggle.IsChecked = source.PortableCache;
     }
 
@@ -141,6 +142,7 @@ public partial class SettingsWindow : Window
         target.SendDoNotTrack = DntToggle.IsChecked == true;
         target.SendGPC = GpcToggle.IsChecked == true;
         target.WebRTCIPProtection = WebRtcToggle.IsChecked == true;
+        target.FetchEngineIcons = FetchEngineIconsToggle.IsChecked == true;
         target.PortableCache = PortableCacheToggle.IsChecked == true;
     }
 
@@ -221,6 +223,7 @@ public partial class SettingsWindow : Window
         target.SendDoNotTrack = source.SendDoNotTrack;
         target.SendGPC = source.SendGPC;
         target.WebRTCIPProtection = source.WebRTCIPProtection;
+        target.FetchEngineIcons = source.FetchEngineIcons;
         target.Theme = source.Theme;
         target.OnlineSearchSuggestions = source.OnlineSearchSuggestions;
         target.ClearOnExit = source.ClearOnExit;

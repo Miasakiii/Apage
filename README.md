@@ -22,6 +22,7 @@
 - **隐私资产已闭环**：PSL `2026-10-28` 版本；内置 EasyList/EasyPrivacy 快照 **94,646 条**通过 SHA-256 校验，MIT/MPL/CC 许可全文随包；运行时零自动更新请求。
 - **启动指标（2026-11-02，正式单文件 3 轮）**：首启 ContentRendered **1026.2ms**，热启中位 **959.25ms**。热启通过本机 1000ms 打包门禁，但首启仍超过 1 秒，且当前不是稳定参考机；完整发布验收未通过。
 - **数据、查找与规则更新已闭环**：书签/历史/下载落 SQLite（隐私标签不记历史），支持 Chrome/Edge 书签 HTML 导入；地址栏本地建议与 Ctrl+F 页内查找可用；规则更新仅在设置里手动点击触发，逐跳 HTTPS、全程串行、校验后原子替换，热更新保留 `adblock/*.txt` 用户规则。
+- **站点图标**：新标签页优先显示站点自带 favicon。用户访问站点时由 WebView2 已取回的图标直接落盘（零额外请求）；四个搜索引擎图标为开箱可用，会在本地无缓存时各抓取一次 `favicon.ico`（HTTPS、仅白名单主机、可在设置关闭）。用户自己添加的站点不做抓取，无图标时回落品牌色字标（[证据](docs/spikes/results/favicon-cache.md)）。
 - **证据与后续顺序**：见 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)、[S4 硬化验证](docs/design/2026-11-02-s4-hardening-validation.md)、[Cookie 探针](docs/spikes/results/cookie-privacy.md)、[S4 启动复验记录](docs/design/2026-11-02-s4-startup-recheck.md)、[B2/A3 实施记录](docs/design/2026-10-29-b2-data-a3-rule-update.md)、[D2 发布工程记录](docs/design/2026-10-29-d2-release-engineering.md)、[签名手册](docs/release/signing.md)、[A2 实施记录](docs/design/2026-10-29-a2-psl-rule-snapshot.md)、[S2 第一批实施记录](docs/design/2026-10-29-s2-first-slice.md)、[S1 验证结果](docs/spikes/results/single-file.md) 与 [v0.1 发布收敛计划](docs/design/2026-10-28-v01-release-convergence.md)。
 
 ## 技术栈

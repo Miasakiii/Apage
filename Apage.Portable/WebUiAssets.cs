@@ -16,7 +16,7 @@ namespace Apage.Portable;
 internal static class WebUiAssets
 {
     /// <summary>资产版本：改动 webui 内容时 +1，触发重新抽取。</summary>
-    private const string Version = "2";
+    private const string Version = "9";
 
     /// <summary>参与抽取的文件清单（与 Assets\webui\ 实际文件一一对应）。</summary>
     private static readonly string[] Files = { "index.html", "app.js", "style.css", "tokens.css", "error.html" };

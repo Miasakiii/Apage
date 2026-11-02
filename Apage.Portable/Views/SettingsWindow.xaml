@@ -46,15 +46,16 @@
                                 <ColumnDefinition Width="220"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="地址栏搜索引擎"
+                                <TextBlock Text="默认搜索引擎"
                                            Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
-                                <TextBlock Text="即时生效：下一次搜索使用新引擎"
+                                <TextBlock Text="新标签页与地址栏共用；即时生效"
                                            Margin="0,2,0,0"
                                            FontSize="{DynamicResource Apage.FontSize.Xs}"
                                            Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
                             </StackPanel>
                             <ComboBox x:Name="SearchEngineBox" Grid.Column="1"
                                       Height="30" VerticalContentAlignment="Center">
+                                <ComboBoxItem Content="百度" Tag="baidu"/>
                                 <ComboBoxItem Content="Bing" Tag="bing"/>
                                 <ComboBoxItem Content="Google" Tag="google"/>
                                 <ComboBoxItem Content="DuckDuckGo" Tag="duckduckgo"/>
@@ -164,6 +165,37 @@
                                 HorizontalAlignment="Left"
                                 Margin="0,12,0,0"
                                 Click="UpdateRules_Click"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 新标签页图标（唯一会主动出站的显示类请求，默认开、可关） -->
+                <Border Background="{DynamicResource Apage.Brush.Surface}"
+                        BorderBrush="{DynamicResource Apage.Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="{DynamicResource Apage.CornerRadius.Md}"
+                        Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="新标签页图标"
+                                   FontSize="{DynamicResource Apage.FontSize.Md}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="获取搜索引擎图标"
+                                           Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
+                                <TextBlock Text="本地没有图标时，向百度 / 必应 / Google / DuckDuckGo 各请求一次 favicon.ico（HTTPS、限时限大小），之后只用本地缓存。关闭后完全不发请求，显示字标。"
+                                           Margin="0,2,0,0" TextWrapping="Wrap"
+                                           FontSize="{DynamicResource Apage.FontSize.Xs}"
+                                           Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
+                            </StackPanel>
+                            <ToggleButton x:Name="FetchEngineIconsToggle" Grid.Column="1"
+                                          Style="{StaticResource Apage.Style.Toggle}"
+                                          VerticalAlignment="Center"/>
+                        </Grid>
                     </StackPanel>
                 </Border>
 

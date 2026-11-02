@@ -120,6 +120,16 @@ namespace Apage.Portable
                     return false;
                 }
 
+                // 等 Input 优先级的 FocusFindInput 执行完，再检查真实 Win32 焦点。
+                // 仅看 WPF IsKeyboardFocused 不够：WPF 认为焦点在 TextBox 时，键盘仍可能进入 WebView2。
+                FindBox.Dispatcher.Invoke(new Action(() => { }), DispatcherPriority.Input);
+                var popupSource = PresentationSource.FromVisual(FindBar) as HwndSource;
+                if (popupSource == null || GetFocus() != popupSource.Handle)
+                {
+                    detail = $"input-focus-not-acquired; expected={popupSource?.Handle ?? IntPtr.Zero}; actual={GetFocus()}";
+                    return false;
+                }
+
                 var size = FindBar.DesiredSize;
                 var hostWidth = TabHost.ActualWidth;
                 var right = FindPopup.HorizontalOffset + size.Width;
@@ -179,8 +189,8 @@ namespace Apage.Portable
         }
 
         /// <summary>
-        /// 冒烟专用：真实走一次 NTP WebMessage 桥（getStats），验证 e.Source/core.Source
-        /// 的精确来源门控没有把正常新标签页误拦截。返回 false 表示桥不可用或来源校验失败。
+        /// 冒烟专用：真实走一次 NTP WebMessage 桥（getConfig），验证 e.Source/core.Source
+        /// 的精确来源门控没有把正常新标签页误拦截，并确认搜索引擎配置能下发。
         /// </summary>
         internal async Task<bool> ValidateNtpBridgeAsync()
         {
@@ -213,9 +223,12 @@ namespace Apage.Portable
   var w = window.chrome && window.chrome.webview;
   if (!w) { return false; }
   w.addEventListener('message', function (e) {
-    if (e && e.data && e.data.type === 'stats') { window.__apageNtpProbe = 'ok'; }
+    if (e && e.data && e.data.type === 'config') {
+      window.__apageNtpProbe = (typeof e.data.searchEngine === 'string' && e.data.searchEngine)
+        ? 'ok' : 'bad';
+    }
   });
-  w.postMessage({ channel: 'ntp', type: 'getStats' });
+  w.postMessage({ channel: 'ntp', type: 'getConfig' });
   return true;
 })()";
 
@@ -226,6 +239,176 @@ namespace Apage.Portable
             await Task.Delay(500);
             var observed = await core.ExecuteScriptAsync("window.__apageNtpProbe").ConfigureAwait(true);
             return observed?.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// 冒烟专用：在真实 NTP 页面上走一次快捷方式新增→删除→持久化恢复，
+        /// 防止管理入口退化成只发消息的占位。
+        /// </summary>
+        internal async Task<bool> ValidateNtpShortcutsAsync()
+        {
+            var core = _tabs?.Current?.View?.Core;
+            if (core == null ||
+                !string.Equals(core.Source, WebUiAssets.IndexUri, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            const string script = @"(function () {
+  var KEY = 'apage.ntp.shortcuts';
+  var original = null;
+  try { original = localStorage.getItem(KEY); } catch (_) { }
+  try {
+    // 搜索区布局门禁：主控件必须真的是大卡片，且提交钮在卡片内（防止退回小胶囊或丢按钮）
+    var form = document.getElementById('search-form');
+    var submit = document.getElementById('search-submit');
+    if (!form || !submit) { return 'FAIL:no-search-submit'; }
+    var formRect = form.getBoundingClientRect();
+    if (formRect.height < 50 || formRect.width < 520) {
+      return 'FAIL:search-box=' + formRect.width.toFixed(0) + 'x' + formRect.height.toFixed(0);
+    }
+    var submitRect = submit.getBoundingClientRect();
+    if (submitRect.width < 30 || submitRect.right > formRect.right + 1) {
+      return 'FAIL:submit-outside';
+    }
+
+    var before = document.querySelectorAll('#shortcuts .shortcut-wrap').length;
+    var add = document.querySelector('#shortcuts .shortcut-item.add');
+    if (!add) { return 'FAIL:no-add-button'; }
+    add.click();
+
+    var dialog = document.getElementById('shortcut-dialog');
+    if (!dialog || !dialog.open) { return 'FAIL:dialog-not-open'; }
+
+    // 居中门禁：临时停掉入场动画，取纯布局盒（transform 会污染 getBoundingClientRect）。
+    // 若 dialog 被留在带 transform 的 #content 里，这里会偏离视口中心而直接拦下。
+    var prevAnimation = dialog.style.animation;
+    dialog.style.animation = 'none';
+    var rect = dialog.getBoundingClientRect();
+    dialog.style.animation = prevAnimation;
+    if (rect.width < 100 || rect.height < 100) {
+      return 'FAIL:dialog-collapsed=' + rect.width.toFixed(0) + 'x' + rect.height.toFixed(0);
+    }
+    var dx = Math.abs((rect.left + rect.right) / 2 - window.innerWidth / 2);
+    var dy = Math.abs((rect.top + rect.bottom) / 2 - window.innerHeight / 2);
+    if (dx > 1.5 || dy > 1.5) {
+      return 'FAIL:not-centered dx=' + dx.toFixed(1) + ' dy=' + dy.toFixed(1);
+    }
+
+    document.getElementById('shortcut-name').value = 'Smoke';
+    document.getElementById('shortcut-url').value = 'https://smoke.apage.invalid';
+    document.getElementById('shortcut-form').dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }));
+
+    var added = document.querySelectorAll('#shortcuts .shortcut-wrap').length;
+    var wraps = document.querySelectorAll('#shortcuts .shortcut-wrap');
+    var last = wraps[wraps.length - 1];
+    var remove = last && last.querySelector('.shortcut-remove');
+    if (!remove) { return 'FAIL:no-remove-button'; }
+    remove.click();
+
+    var after = document.querySelectorAll('#shortcuts .shortcut-wrap').length;
+    return (added === before + 1 && after === before)
+      ? 'PASS'
+      : 'FAIL:counts=' + before + '/' + added + '/' + after;
+  } catch (e) {
+    return 'FAIL:' + (e && e.message ? e.message : 'exception');
+  } finally {
+    try {
+      if (original === null) localStorage.removeItem(KEY);
+      else localStorage.setItem(KEY, original);
+    } catch (_) { }
+  }
+})()";
+
+            var raw = await core.ExecuteScriptAsync(script).ConfigureAwait(true);
+            var outcome = System.Text.Json.JsonSerializer.Deserialize<string>(raw ?? "\"\"");
+            if (!string.Equals(outcome, "PASS", StringComparison.Ordinal))
+                return false;
+
+            // 图标桥：宿主必须回一个 icons 对象。新标签页是 file:// 页，正常情况下查不到缓存，
+            // 这里只验协议通（页面能拿到 reply），真实图片由 GetFaviconAsync 落盘后自然命中。
+            const string faviconProbe = @"(function () {
+  window.__apageFavicons = 'pending';
+  var w = window.chrome && window.chrome.webview;
+  if (!w) { return false; }
+  w.addEventListener('message', function (e) {
+    if (e && e.data && e.data.type === 'favicons') {
+      window.__apageFavicons = (e.data.icons && typeof e.data.icons === 'object') ? 'ok' : 'bad';
+    }
+  });
+  w.postMessage({ channel: 'ntp', type: 'getFavicons', hosts: ['example.com'] });
+  return true;
+})()";
+
+            var faviconStarted = await core.ExecuteScriptAsync(faviconProbe).ConfigureAwait(true);
+            if (!string.Equals(faviconStarted, "true", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            await Task.Delay(300);
+            var faviconState = await core.ExecuteScriptAsync("window.__apageFavicons").ConfigureAwait(true);
+            if (faviconState?.IndexOf("ok", StringComparison.OrdinalIgnoreCase) < 0)
+                return false;
+
+            // 白名单门禁：非引擎主机的抓取请求必须被静默丢弃（不回包、不发请求）。
+            // 先等前面可能的回包落地，再用哨兵观察 700ms。
+            await Task.Delay(1200);
+            const string denyProbe = @"(function () {
+  window.__apageFavicons = 'armed';
+  var w = window.chrome && window.chrome.webview;
+  if (!w) { return false; }
+  w.postMessage({ channel: 'ntp', type: 'fetchEngineIcon', host: 'evil.example.com' });
+  w.postMessage({ channel: 'ntp', type: 'fetchEngineIcon', host: 'www.bing.com.evil.example.com' });
+  return true;
+})()";
+
+            var denyStarted = await core.ExecuteScriptAsync(denyProbe).ConfigureAwait(true);
+            if (!string.Equals(denyStarted, "true", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            await Task.Delay(700);
+            var denyState = await core.ExecuteScriptAsync("window.__apageFavicons").ConfigureAwait(true);
+            return denyState?.IndexOf("armed", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// 冒烟专用：通过真实 NTP 消息切换搜索引擎，确认宿主内存、settings.json
+        /// 与地址栏一致，然后恢复原值。防止“新标签页看起来保存了、重启又变回默认”。
+        /// </summary>
+        internal async Task<bool> ValidateNtpSearchEnginePersistenceAsync()
+        {
+            var core = _tabs?.Current?.View?.Core;
+            if (core == null || _services == null ||
+                !string.Equals(core.Source, WebUiAssets.IndexUri, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var original = _services.Settings.Current.SearchEngine;
+            var target = string.Equals(original, "google", StringComparison.OrdinalIgnoreCase)
+                ? "baidu"
+                : "google";
+
+            await core.ExecuteScriptAsync(
+                "chrome.webview.postMessage({channel:'ntp',type:'setSearchEngine',engine:'" + target + "'});")
+                .ConfigureAwait(true);
+
+            var deadline = DateTime.UtcNow.AddSeconds(2);
+            while (DateTime.UtcNow < deadline &&
+                   !string.Equals(_services.Settings.Current.SearchEngine, target, StringComparison.OrdinalIgnoreCase))
+            {
+                await Task.Delay(50);
+            }
+
+            await Task.Delay(350); // 等异步 SaveAsync 落盘
+            await _services.Settings.LoadAsync();
+            var persisted = string.Equals(
+                _services.Settings.Current.SearchEngine, target, StringComparison.OrdinalIgnoreCase);
+
+            _services.Settings.Current.SearchEngine = original;
+            Omnibox.SearchEngine = original;
+            try { await _services.Settings.SaveAsync(); } catch { /* 冒烟恢复失败不掩盖主结论 */ }
+            return persisted;
         }
 
         public MainWindow()
@@ -269,6 +452,9 @@ namespace Apage.Portable
                 PositionToast();
                 ApplyToastClickThrough();
             };
+            // WebView2 是独立 HwndHost：Popup 打开后 WPF 焦点不会自动迁移 Win32 键盘焦点。
+            // 必须在 Opened 后显式 SetFocus 到 Popup 子窗口，否则输入仍落到网页。
+            FindPopup.Opened += (s, e) => FocusFindInput();
             TabHost.SizeChanged += (s, e) =>
             {
                 if (FindPopup.IsOpen)
@@ -526,7 +712,7 @@ namespace Apage.Portable
             _tabs.Dispose(); // 停止休眠定时器
         }
 
-        // 新标签页动作上浮（设计 §4.2）；真实设置窗口已接通，addShortcut 仍属 Phase 4。
+        // 新标签页动作上浮（设计 §4.2）；快捷方式增删已改为页面本地持久化。
         private void OnTabAction(object? sender, string action)
         {
             if (action == "openSettings")
@@ -535,8 +721,48 @@ namespace Apage.Portable
                 return;
             }
 
+            const string enginePrefix = "setSearchEngine:";
+            if (action.StartsWith(enginePrefix, StringComparison.Ordinal))
+            {
+                _ = ApplySearchEngineAsync(action.Substring(enginePrefix.Length));
+                return;
+            }
+
             _services?.LocalLog.Write(LocalLogLevel.Info, "ntp", "action-not-implemented=" + action);
         }
+
+        // NTP 选择的搜索引擎写回宿主设置（settings.json），并同步地址栏。
+        // NTP 的 localStorage 只作离线回退，宿主设置才是跨重启真源。
+        private async Task ApplySearchEngineAsync(string? engineId)
+        {
+            if (_services == null ||
+                !IsSupportedSearchEngine(engineId))
+            {
+                return;
+            }
+
+            var settings = _services.Settings;
+            var previous = settings.Current.SearchEngine;
+            settings.Current.SearchEngine = engineId!;
+            Omnibox.SearchEngine = engineId!;
+            try
+            {
+                await settings.SaveAsync();
+                _services.LocalLog.Write(LocalLogLevel.Info, "settings", "search-engine=" + engineId);
+            }
+            catch (Exception ex)
+            {
+                settings.Current.SearchEngine = previous;
+                Omnibox.SearchEngine = previous;
+                _services.LocalLog.WriteException("search-engine-save", ex);
+            }
+        }
+
+        private static bool IsSupportedSearchEngine(string? engineId) =>
+            string.Equals(engineId, "baidu", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(engineId, "bing", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(engineId, "google", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(engineId, "duckduckgo", StringComparison.OrdinalIgnoreCase);
 
         private void HandleShortcut(string action)
         {
@@ -649,9 +875,35 @@ namespace Apage.Portable
             if (FindBox.Text.Length > 0)
                 RunFind();
 
-            // Popup 刚打开时焦点尚未稳定，延后一拍再取焦点，否则 SelectAll 会作用到网页上
+            // Opened 会处理首次打开；已打开时再次 Ctrl+F 也把焦点拉回查找框。
+            FocusFindInput();
+        }
+
+        /// <summary>
+        /// 把真实 Win32 键盘焦点移到查找 Popup。
+        /// WPF 的 Popup 窗口带 WS_EX_NOACTIVATE，HwndHost（WebView2）内的焦点不会因
+        /// FindBox.Focus() 自动迁出；只做 WPF Focus 会出现“光标在闪但字打进网页”的现象。
+        /// </summary>
+        private void FocusFindInput()
+        {
             FindBox.Dispatcher.BeginInvoke(
-                new Action(() => { FindBox.Focus(); FindBox.SelectAll(); }),
+                new Action(() =>
+                {
+                    try
+                    {
+                        if (PresentationSource.FromVisual(FindBar) is HwndSource source)
+                            SetFocus(source.Handle);
+
+                        Keyboard.Focus(FindBox);
+                        FindBox.Focus();
+                        FindBox.SelectAll();
+                        FindBox.CaretIndex = FindBox.Text.Length;
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.WriteLine($"[MainWindow] 查找框聚焦失败：{ex.GetType().Name}");
+                    }
+                }),
                 DispatcherPriority.Input);
         }
 
@@ -949,6 +1201,24 @@ namespace Apage.Portable
         }
 
         /// <summary>
+        /// 冒烟专用：校验标签条「+」是否紧跟最后一个标签（夸克式），
+        /// 溢出时是否退化为独立列固定右侧。位置退化属代码回归。
+        /// </summary>
+        internal bool ValidateTabStripLayout(out string detail)
+        {
+            detail = string.Empty;
+            try
+            {
+                return TabStrip.IsNewTabButtonAdjacentToLastTab(out detail);
+            }
+            catch (Exception ex)
+            {
+                detail = "exception:" + ex.GetType().Name;
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 冒烟专用：真实打开提示条并校验布局（Popup 打开、尺寸非零、不溢出内容区、关闭后状态干净）。
         /// 与查找条同属 airspace 风险，布局退化即代码回归，故作为门禁项。
         /// </summary>
@@ -1129,5 +1399,11 @@ namespace Apage.Portable
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetFocus(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetFocus();
     }
 }

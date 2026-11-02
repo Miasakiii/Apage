@@ -78,8 +78,10 @@ if ($appDef.Count -ne 1 -or $appDef[0].GetAttribute('Include') -ne 'App.xaml') {
 # The browser itself talks through WebView2; app code has no business making
 # its own outbound requests (AGENTS.md: zero telemetry / zero background requests).
 #
-# A3 精确豁免：手动规则更新是唯一被批准的用户触发式出站请求，
-# 只允许写在 RuleUpdateClient.cs 这一个文件里（按钮触发、HTTPS、限时限大小）。
+# 精确豁免（仅两个文件，均为产品明示的出站路径）：
+#   RuleUpdateClient.cs  手动规则更新（按钮触发、HTTPS、限时限大小）
+#   FaviconFetcher.cs    搜索引擎图标一次性抓取（仅白名单主机、缓存缺失时、
+#                        默认可在设置关闭；HTTPS、不跟随跳转、限时限大小）
 # 豁免是文件级而非模式级：其他任何文件出现网络类型仍然失败；
 # 遥测类模式对全部文件生效，不接受任何豁免。
 $networkPatterns = @(
@@ -91,6 +93,7 @@ $networkPatterns = @(
 )
 $networkExemptFiles = @(
     'Apage.Portable\Services\RuleUpdateClient.cs'
+    'Apage.Portable\Services\FaviconFetcher.cs'
 )
 
 $telemetryPatterns = @(

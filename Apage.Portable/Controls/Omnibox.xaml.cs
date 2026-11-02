@@ -224,6 +224,7 @@ public partial class Omnibox : UserControl
         var q = Uri.EscapeDataString(input);
         switch (SearchEngine?.ToLowerInvariant())
         {
+            case "baidu": return "https://www.baidu.com/s?wd=" + q;
             case "google": return "https://www.google.com/search?q=" + q;
             case "duckduckgo": return "https://duckduckgo.com/?q=" + q;
             default: return "https://www.bing.com/search?q=" + q;

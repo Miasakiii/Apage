@@ -90,6 +90,10 @@ namespace Apage.Portable
             var findProbeDone = false;
             var ntpProbeStarted = false;
             var ntpProbeDone = false;
+            var ntpShortcutStarted = false;
+            var ntpShortcutDone = false;
+            var ntpEngineStarted = false;
+            var ntpEngineDone = false;
             var timer = new DispatcherTimer { Interval = PollInterval };
             timer.Tick += async (s, e) =>
             {
@@ -158,7 +162,7 @@ namespace Apage.Portable
 
                         try
                         {
-                            findAvailable = await view.StartFindAsync("本周已拦截");
+                            findAvailable = await view.StartFindAsync("添加");
                             if (findAvailable)
                             {
                                 var first = await Task.WhenAny(reported.Task, Task.Delay(1500));
@@ -212,6 +216,19 @@ namespace Apage.Portable
 
                     window.LogSmokeNote("toast-layout", toastDetail);
 
+                    // 标签条「+」位置探针（可门禁）：须紧跟最后一个标签；溢出时退化到固定右侧列。
+                    if (!window.ValidateTabStripLayout(out var tabStripDetail))
+                    {
+                        timer.Stop();
+                        Trace.WriteLine("[Smoke] 标签条「+」位置校验失败：" + tabStripDetail);
+                        window.LogSmokeNote("tabstrip-layout-failed", tabStripDetail);
+                        StartupMetrics.Complete("tabstrip-layout-failed", 1);
+                        app.Shutdown(1);
+                        return;
+                    }
+
+                    window.LogSmokeNote("tabstrip-layout", tabStripDetail);
+
                     findProbeDone = true;
                 }
 
@@ -244,9 +261,66 @@ namespace Apage.Portable
                     ntpProbeDone = true;
                 }
 
+                // 快捷方式管理（可门禁）：真实页面新增一条、删除一条并恢复原 localStorage。
+                if (ntpProbeDone && !ntpShortcutStarted)
+                {
+                    ntpShortcutStarted = true;
+                    bool shortcutOk;
+                    try
+                    {
+                        shortcutOk = await window.ValidateNtpShortcutsAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        shortcutOk = false;
+                        window.LogSmokeFailure(ex);
+                    }
+
+                    window.LogSmokeNote("ntp-shortcuts", shortcutOk ? "pass" : "fail");
+                    if (!shortcutOk)
+                    {
+                        timer.Stop();
+                        Trace.WriteLine("[Smoke] 快捷方式增删校验失败");
+                        StartupMetrics.Complete("ntp-shortcuts-failed", 1);
+                        app.Shutdown(1);
+                        return;
+                    }
+
+                    ntpShortcutDone = true;
+                }
+
+                // 搜索引擎持久化（可门禁）：真实消息切换 → settings.json 回读 → 恢复原值。
+                if (ntpShortcutDone && !ntpEngineStarted)
+                {
+                    ntpEngineStarted = true;
+                    bool engineOk;
+                    try
+                    {
+                        engineOk = await window.ValidateNtpSearchEnginePersistenceAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        engineOk = false;
+                        window.LogSmokeFailure(ex);
+                    }
+
+                    window.LogSmokeNote("ntp-engine", engineOk ? "pass" : "fail");
+                    if (!engineOk)
+                    {
+                        timer.Stop();
+                        Trace.WriteLine("[Smoke] 搜索引擎持久化校验失败");
+                        StartupMetrics.Complete("ntp-engine-failed", 1);
+                        app.Shutdown(1);
+                        return;
+                    }
+
+                    ntpEngineDone = true;
+                }
+
                 // 信号③：当前标签 CoreWebView2 非空 = Environment 创建 + 内核进程初始化成功
                 // 信号④：SQLite 初始化完成（验证单文件中的托管/原生依赖链真实可用）
                 if (rendered && windowsValidated && dataChecked && findProbeDone && ntpProbeDone &&
+                    ntpShortcutDone && ntpEngineDone &&
                     window.Tabs?.Current?.View?.Core != null &&
                     window.DatabaseReady && window.PrivacyAssetsReady)
                 {

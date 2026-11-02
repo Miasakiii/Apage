@@ -79,6 +79,12 @@ namespace Apage.Portable
             _services.InitializeAsync().GetAwaiter().GetResult();
             AppPaths.PortableCache = _services.Settings.Current.PortableCache;
             AppPaths.EnsureCreated();
+
+            // 冒烟/CI 不得触网：关掉引擎图标抓取，让新标签页走「无图标 → 字标」分支。
+            // 注意这只影响本次进程，不写回 settings.json。
+            if (_smokeMode)
+                _services.Settings.Current.FetchEngineIcons = false;
+
             StartupMetrics.Mark("SettingsAndStatsReady");
 
             // WebRTC IP 泄露防护（§5.2）：Environment 创建时一次性生效（普通/隐私环境同参数，§4.4）
@@ -100,6 +106,8 @@ namespace Apage.Portable
                 Settings = _services.Settings.Current,
                 Stats = _services.PrivacyStats,
                 Lifecycle = _lifecycle,
+                // 图标缓存只落盘 WebView2 已取回的 favicon，新标签页从本地读，不额外联网
+                Favicons = new FaviconStore(Path.Combine(AppPaths.DataDirectory, "favicons")),
             };
             // 内置 PSL/规则与用户规则在窗口首帧后加载（MainWindow.InitializeTabsAsync），
             // 避免 2MB+ 快照解析阻塞 ContentRendered。

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,6 +15,7 @@ using System.Windows.Media.Imaging;
 using Apage.Core.Configuration;
 using Apage.Core.Models;
 using Apage.Core.Services;
+using Apage.Portable.Services;
 using Microsoft.Web.WebView2.Core;
 
 namespace Apage.Portable.Views;
@@ -330,10 +332,10 @@ public partial class BrowserTabView : UserControl
         // 下载（B2）：保留 WebView2 自带下载提示，仅把生命周期落库，供下载列表取消/打开。
         core.DownloadStarting += (s, e) => Downloads?.Track(e.DownloadOperation);
 
-        // §5.4 事件管道（设计 §4.1）：隐私头注入 / 三方 Cookie 剥离 / 广告拦截计数一处收口
+        // §5.4 事件管道（设计 §4.1）：隐私头注入 / 广告拦截计数一处收口
         HookWebPipeline(core);
 
-        // 新标签页 WebMessage 桥（设计 §4.2）：navigate / getStats / openSettings / addShortcut
+        // 新标签页 WebMessage 桥（设计 §4.2）：navigate / getConfig / setSearchEngine / openSettings
         core.WebMessageReceived += OnWebMessageReceived;
 
         // 页内查找（S3）：会话对象与两个计数事件在此一次性挂接；Ctrl+F 需从内核侧上浮
@@ -523,12 +525,14 @@ public partial class BrowserTabView : UserControl
             _topLevelNavigationUris.Remove(_topLevelNavigationOrder.Dequeue());
     }
 
-    /// <summary>新标签页动作上浮（openSettings / addShortcut：设置面板与快捷方式管理属 Phase 6/4 后续，宿主先以提示承接）。</summary>
+    /// <summary>新标签页动作上浮（openSettings：打开真实设置窗口；快捷方式增删在页面本地完成）。</summary>
     public event EventHandler<string>? NewTabAction;
 
     private const string NtpChannel = "ntp";
 
-    // 新标签页 WebMessage 桥（设计 §4.2）：仅处理 channel='ntp' 的消息。
+    // 新标签页 WebMessage 桥（设计 §4.2）：只处理 channel='ntp' 的
+    // navigate / getConfig / setSearchEngine / openSettings。
+    // 快捷方式增删已在新标签页本地完成，不再经宿主桥接。
     // 安全门控：任意网页均可 chrome.webview.postMessage，必须同时满足
     //   1) 发送消息的 document（e.Source）就是 NTP index.html；
     //   2) 当前顶层页面（core.Source）也是 NTP，排除“远程页面内嵌 NTP iframe”借用宿主能力。
@@ -556,11 +560,20 @@ public partial class BrowserTabView : UserControl
                     if (root.TryGetProperty("url", out var url))
                         Navigate(url.GetString() ?? string.Empty);
                     break;
-                case "getStats":
-                    ReplyStats(core);
+                case "getConfig":
+                    ReplyConfig(core);
+                    break;
+                case "getFavicons":
+                    ReplyFavicons(core, root);
+                    break;
+                case "fetchEngineIcon":
+                    FetchEngineIcon(core, root);
+                    break;
+                case "setSearchEngine":
+                    if (root.TryGetProperty("engine", out var engine))
+                        NewTabAction?.Invoke(this, "setSearchEngine:" + (engine.GetString() ?? string.Empty));
                     break;
                 case "openSettings":
-                case "addShortcut":
                     NewTabAction?.Invoke(this, type.GetString()!);
                     break;
             }
@@ -577,16 +590,138 @@ public partial class BrowserTabView : UserControl
         !string.IsNullOrEmpty(source) &&
         string.Equals(source, WebUiAssets.IndexUri, StringComparison.OrdinalIgnoreCase);
 
-    // 隐私统计回复：与 app.js 的桥约定对齐（{channel:'ntp', type:'stats', ads}）。
-    // trackers 已移除：WebView2 当前没有可验证的第三方 Cookie 阻断能力，不能继续展示无效承诺。
-    private void ReplyStats(CoreWebView2 core)
+    // 新标签页配置回复：当前只暴露搜索引擎，作为页面 localStorage 的权威值。
+    private void ReplyConfig(CoreWebView2 core)
     {
-        var ads = Context?.Stats?.Snapshot.Ads ?? 0;
+        var engine = Context?.Settings?.SearchEngine ?? "bing";
         core.PostWebMessageAsJson(JsonSerializer.Serialize(
-            new { channel = NtpChannel, type = "stats", ads }));
+            new { channel = NtpChannel, type = "config", searchEngine = engine }));
     }
 
-    // WebView2 favicon 变更：取回 PNG 流解码为 ImageSource（无图标则 null），广播给宿主回填标签。
+    /// <summary>
+    /// 新标签页图标回复：页面只报自己当前快捷方式的主机名，宿主按需从本地缓存读，
+    /// 缺图的主机不出现在结果里（页面回落字标）。上限 32 个主机，避免页面一次索要整库。
+    /// </summary>
+    private async void ReplyFavicons(CoreWebView2 core, JsonElement message)
+    {
+        var store = Context?.Favicons;
+        var hosts = new List<string>();
+        if (store != null &&
+            message.TryGetProperty("hosts", out var array) &&
+            array.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in array.EnumerateArray())
+            {
+                if (hosts.Count >= 32)
+                    break;
+                if (item.ValueKind == JsonValueKind.String)
+                    hosts.Add(item.GetString() ?? string.Empty);
+            }
+        }
+
+        var icons = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (store != null && hosts.Count > 0)
+        {
+            var bytesByHost = await store.ReadAsync(hosts).ConfigureAwait(true);
+            foreach (var pair in bytesByHost)
+                icons[pair.Key] = FaviconStore.ToDataUrl(pair.Value);
+        }
+
+        // 等待读盘期间页面可能已导航走：PostIcons 内部已吞掉这类异常
+        PostIcons(core, icons);
+    }
+
+    // 会话级抓取记录：每个主机最多尝试一次，失败不重试（避免每次开新标签页都发请求）。
+    private static readonly HashSet<string> IconFetchAttempted = new(StringComparer.Ordinal);
+    private static readonly object IconFetchGate = new();
+
+    /// <summary>
+    /// 搜索引擎图标一次性抓取（唯一被批准的第二条出站路径）。
+    /// 门控三层：用户开关 → 主机白名单 → 本地缓存；任一关掉都不发请求。
+    /// 非白名单主机的请求直接丢弃，不回包，避免把浏览器变成通用取图代理。
+    /// </summary>
+    private async void FetchEngineIcon(CoreWebView2 core, JsonElement message)
+    {
+        if (!message.TryGetProperty("host", out var hostElement) ||
+            hostElement.ValueKind != JsonValueKind.String)
+        {
+            return;
+        }
+
+        var host = FaviconStore.NormalizeHost(hostElement.GetString());
+        if (host == null || !SearchEngineHosts.IsAllowed(host))
+            return;
+
+        var empty = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (Context?.Settings?.FetchEngineIcons != true)
+        {
+            PostIcons(core, empty);
+            return;
+        }
+
+        var store = Context?.Favicons;
+        if (store == null)
+            return;
+
+        // 已有缓存：直接回，不发请求（缓存可能由用户访问该站时写入）
+        var cached = await store.ReadAsync(new[] { host }).ConfigureAwait(true);
+        if (cached.TryGetValue(host, out var cachedBytes))
+        {
+            PostIcons(core, new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [host] = FaviconStore.ToDataUrl(cachedBytes),
+            });
+            return;
+        }
+
+        bool firstAttempt;
+        lock (IconFetchGate)
+            firstAttempt = IconFetchAttempted.Add(host);
+        if (!firstAttempt)
+        {
+            PostIcons(core, empty);
+            return;
+        }
+
+        byte[]? fetched;
+        try
+        {
+            fetched = await FaviconFetcher.FetchAsync(host, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception)
+        {
+            fetched = null; // 抓取失败只影响图标显示
+        }
+
+        if (fetched == null || fetched.Length == 0)
+        {
+            PostIcons(core, empty);
+            return;
+        }
+
+        await store.SaveAsync(host, fetched).ConfigureAwait(true);
+        PostIcons(core, new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [host] = FaviconStore.ToDataUrl(fetched),
+        });
+    }
+
+    // 统一的图标回包（getFavicons / fetchEngineIcon 共用）
+    private void PostIcons(CoreWebView2 core, Dictionary<string, string> icons)
+    {
+        try
+        {
+            core.PostWebMessageAsJson(JsonSerializer.Serialize(
+                new { channel = NtpChannel, type = "favicons", icons }));
+        }
+        catch (Exception)
+        {
+            // 页面已导航走或内核已释放：丢弃
+        }
+    }
+
+    // WebView2 favicon 变更：取回 PNG 流，一份解码给标签条，一份落盘给新标签页复用。
+    // 这里不产生任何额外的网络请求——内核在加载该页时已经取回了图标。
     private async void OnFaviconChanged(object? sender, object e)
     {
         var core = WebView.CoreWebView2;
@@ -599,7 +734,15 @@ public partial class BrowserTabView : UserControl
             if (!string.IsNullOrEmpty(core.FaviconUri))
             {
                 using var stream = await core.GetFaviconAsync(CoreWebView2FaviconImageFormat.Png).ConfigureAwait(true);
-                icon = DecodeIcon(stream);
+                var bytes = ReadAllBytes(stream);
+                icon = DecodeIcon(bytes);
+
+                if (bytes.Length > 0 && Context?.Favicons != null)
+                {
+                    var host = HostOf(core.Source);
+                    if (host != null)
+                        _ = Context.Favicons.SaveAsync(host, bytes);
+                }
             }
         }
         catch
@@ -610,18 +753,38 @@ public partial class BrowserTabView : UserControl
         FaviconChanged?.Invoke(this, icon);
     }
 
-    private static ImageSource? DecodeIcon(Stream? stream)
+    /// <summary>取页面主机名（仅 http/https）；本地页与新标签页返回 null。</summary>
+    private static string? HostOf(string? source)
+    {
+        if (string.IsNullOrEmpty(source) ||
+            !Uri.TryCreate(source, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            return null;
+
+        return string.IsNullOrEmpty(uri.Host) ? null : uri.Host;
+    }
+
+    private static byte[] ReadAllBytes(Stream? stream)
     {
         if (stream == null)
-            return null;
+            return Array.Empty<byte>();
 
-        // 拷到可定位的 MemoryStream，OnLoad 立即解码后即可释放源流
         using var ms = new MemoryStream();
         stream.CopyTo(ms);
-        if (ms.Length == 0)
-            return null;
-        ms.Position = 0;
+        return ms.ToArray();
+    }
 
+    private static ImageSource? DecodeIcon(byte[] bytes)
+    {
+        if (bytes.Length == 0)
+            return null;
+
+        // 用可定位的 MemoryStream：OnLoad 立即解码后即可释放源流
+        using var ms = new MemoryStream(bytes);
         var bmp = new BitmapImage();
         bmp.BeginInit();
         bmp.CacheOption = BitmapCacheOption.OnLoad;

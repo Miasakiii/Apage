@@ -61,37 +61,108 @@
   });
 
   /* ------------------------------------------------------------------------
-     c) 搜索框：引擎循环切换（百度→必应→Google）+ Enter 跳转
+     c) 搜索框：引擎循环切换 + 持久化（宿主设置为真源，本地存储为离线回退）
      ------------------------------------------------------------------------ */
 
+  var ENGINE_KEY = 'apage.ntp.engine';
+
+  // host -> data URL，由宿主 getFavicons 回复填充（引擎徽标与快捷方式共用）
+  var faviconMap = {};
   var ENGINES = [
-    { name: '百度',   icon: '度', url: 'https://www.baidu.com/s?wd=' },
-    { name: '必应',   icon: '必', url: 'https://www.bing.com/search?q=' },
-    { name: 'Google', icon: 'G',  url: 'https://www.google.com/search?q=' }
+    { id: 'baidu',      name: '百度',       icon: '度', url: 'https://www.baidu.com/s?wd=' },
+    { id: 'bing',       name: '必应',       icon: '必', url: 'https://www.bing.com/search?q=' },
+    { id: 'google',     name: 'Google',     icon: 'G',  url: 'https://www.google.com/search?q=' },
+    { id: 'duckduckgo', name: 'DuckDuckGo', icon: 'D',  url: 'https://duckduckgo.com/?q=' }
   ];
-  var engineIndex = 0;
+
+  function engineIndexById(id) {
+    for (var i = 0; i < ENGINES.length; i++) {
+      if (ENGINES[i].id === id) return i;
+    }
+    return -1;
+  }
+
+  var engineIndex = engineIndexById('bing');
+  try {
+    var savedEngine = localStorage.getItem(ENGINE_KEY);
+    var savedIndex = engineIndexById(savedEngine);
+    if (savedIndex >= 0) engineIndex = savedIndex;
+  } catch (_) { /* file:// 下存储可能不可用 */ }
+
   var engineBtn = document.getElementById('engine-btn');
   var engineIcon = document.getElementById('engine-icon');
   var searchForm = document.getElementById('search-form');
   var searchInput = document.getElementById('search-input');
 
+  // 引擎徽标优先用站点自带图标（与快捷方式同一份本地缓存），取不到才回落字标。
+  // 一个引擎可能有多个主机别名，任一命中即可。
+  var ENGINE_HOSTS = {
+    baidu:      ['www.baidu.com', 'baidu.com'],
+    bing:       ['www.bing.com', 'cn.bing.com', 'bing.com'],
+    google:     ['www.google.com', 'google.com'],
+    duckduckgo: ['duckduckgo.com', 'www.duckduckgo.com']
+  };
+
+  function engineFaviconUrl(eng) {
+    var hosts = ENGINE_HOSTS[eng.id] || [];
+    for (var i = 0; i < hosts.length; i++) {
+      var hit = faviconMap[hosts[i]];
+      if (hit) return hit;
+    }
+    return '';
+  }
+
   function applyEngine() {
     var eng = ENGINES[engineIndex];
-    engineIcon.textContent = eng.icon;
+    var iconUrl = engineFaviconUrl(eng);
+
+    engineIcon.textContent = '';
+    if (iconUrl) {
+      var img = document.createElement('img');
+      img.className = 'engine-favicon';
+      img.alt = '';
+      img.src = iconUrl;
+      engineIcon.appendChild(img);
+      engineBtn.classList.add('has-icon');
+    } else {
+      engineIcon.textContent = eng.icon;
+      engineBtn.classList.remove('has-icon');
+    }
+
     engineBtn.title = '当前：' + eng.name + '（点击切换）';
     engineBtn.setAttribute('aria-label', '当前搜索引擎：' + eng.name + '，点击切换');
+    engineBtn.setAttribute('data-engine', eng.id);
+  }
+
+  function persistEngine() {
+    var id = ENGINES[engineIndex].id;
+    try { localStorage.setItem(ENGINE_KEY, id); } catch (_) { /* 仅影响离线回退 */ }
+    bridgeSend({ type: 'setSearchEngine', engine: id });
   }
 
   engineBtn.addEventListener('click', function () {
     engineIndex = (engineIndex + 1) % ENGINES.length;
     // 200ms 翻转动画：转到 90° 时换字再转回
     engineIcon.classList.add('flip');
-    setTimeout(applyEngine, reducedMotion ? 0 : 100);
+    setTimeout(function () {
+      applyEngine();
+      persistEngine();
+      requestEngineIconIfMissing();
+    }, reducedMotion ? 0 : 100);
     setTimeout(function () { engineIcon.classList.remove('flip'); }, reducedMotion ? 0 : 200);
     searchInput.focus();
   });
 
   applyEngine();
+  bridgeSend({ type: 'getConfig' });
+  bridgeListen(function (msg) {
+    if (!msg || msg.type !== 'config' || typeof msg.searchEngine !== 'string') return;
+    var index = engineIndexById(msg.searchEngine);
+    if (index < 0) return;
+    engineIndex = index;
+    applyEngine();
+    try { localStorage.setItem(ENGINE_KEY, msg.searchEngine); } catch (_) { }
+  });
 
   // 输入是 URL 则直接导航，否则用当前引擎搜索
   function resolveTarget(raw) {
@@ -117,84 +188,272 @@
   });
 
   /* ------------------------------------------------------------------------
-     d) 快捷方式：桩数据 6 个，每行最多 6 个
+     d) 快捷方式：本地增删并持久化（最多 11 个，每行最多 6 个）
      ------------------------------------------------------------------------ */
 
-  var SHORTCUTS = [
-    { name: 'Google', icon: 'G',  url: 'https://www.google.com' },
-    { name: 'GitHub', icon: 'GH', url: 'https://github.com' },
-    { name: 'B站',    icon: 'B',  url: 'https://www.bilibili.com' },
-    { name: '知乎',   icon: '知', url: 'https://www.zhihu.com' },
-    { name: '微博',   icon: '微', url: 'https://weibo.com' }
+  var SHORTCUT_KEY = 'apage.ntp.shortcuts';
+  var MAX_SHORTCUTS = 11;
+  var SHORTCUT_TONE_COUNT = 8;
+  var DEFAULT_SHORTCUTS = [
+    { name: 'Google', icon: 'G',  url: 'https://www.google.com', tone: 0 },
+    { name: 'GitHub', icon: 'GH', url: 'https://github.com', tone: 1 },
+    { name: 'B站',    icon: 'B',  url: 'https://www.bilibili.com', tone: 2 },
+    { name: '知乎',   icon: '知', url: 'https://www.zhihu.com', tone: 3 },
+    { name: '微博',   icon: '微', url: 'https://weibo.com', tone: 4 }
   ];
 
+  function toneForUrl(url) {
+    var hash = 0;
+    for (var i = 0; i < url.length; i++) {
+      hash = ((hash << 5) - hash + url.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash) % SHORTCUT_TONE_COUNT;
+  }
+
   var shortcutsEl = document.getElementById('shortcuts');
+  var shortcutDialog = document.getElementById('shortcut-dialog');
+  var shortcutForm = document.getElementById('shortcut-form');
+  var shortcutName = document.getElementById('shortcut-name');
+  var shortcutUrl = document.getElementById('shortcut-url');
+  var shortcutError = document.getElementById('shortcut-error');
+  var shortcutCancel = document.getElementById('shortcut-cancel');
 
-  SHORTCUTS.forEach(function (s) {
-    var a = document.createElement('a');
-    a.className = 'shortcut-item';
-    a.href = s.url;
-    a.innerHTML = '<span class="shortcut-tile">' + s.icon + '</span>' +
-                  '<span class="shortcut-label">' + s.name + '</span>';
-    a.addEventListener('click', function (e) {
-      e.preventDefault();
-      navigate(s.url);
+  function normalizeShortcutUrl(raw) {
+    var text = String(raw || '').trim();
+    if (!text) return null;
+    if (!/^https?:\/\//i.test(text)) text = 'https://' + text;
+    try {
+      var parsed = new URL(text);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      return parsed.href;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function loadShortcuts() {
+    try {
+      var saved = localStorage.getItem(SHORTCUT_KEY);
+      if (saved !== null) {
+        var parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(function (item) {
+              var url = item && normalizeShortcutUrl(item.url);
+              if (!url) return null;
+              var name = String(item.name || '').trim().slice(0, 24);
+              return {
+                name: name || new URL(url).hostname.replace(/^www\./i, ''),
+                url: url,
+                icon: String(item.icon || '').slice(0, 2),
+                tone: Number.isInteger(item.tone) && item.tone >= 0 && item.tone < SHORTCUT_TONE_COUNT
+                  ? item.tone
+                  : toneForUrl(url)
+              };
+            })
+            .filter(Boolean)
+            .slice(0, MAX_SHORTCUTS);
+        }
+      }
+    } catch (_) { /* 损坏或不可用时回落默认值 */ }
+
+    return DEFAULT_SHORTCUTS.map(function (item) {
+      return { name: item.name, url: item.url, icon: item.icon, tone: item.tone };
     });
-    shortcutsEl.appendChild(a);
-  });
+  }
 
-  // 「+」添加块：虚线占位，后续接自定义快捷方式管理
-  var addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'shortcut-item add';
-  addBtn.title = '添加快捷方式';
-  addBtn.setAttribute('aria-label', '添加快捷方式');
-  addBtn.innerHTML = '<span class="shortcut-tile">+</span>' +
-                     '<span class="shortcut-label">添加</span>';
-  addBtn.addEventListener('click', function () {
-    bridgeSend({ type: 'addShortcut' });
-  });
-  shortcutsEl.appendChild(addBtn);
+  var SHORTCUTS = loadShortcuts();
+
+  function persistShortcuts() {
+    try { localStorage.setItem(SHORTCUT_KEY, JSON.stringify(SHORTCUTS)); } catch (_) { /* 本地存储不可用时仅当前会话生效 */ }
+  }
+
+  function shortcutIcon(name) {
+    var clean = String(name || '').trim();
+    return clean ? clean.slice(0, 1).toUpperCase() : '·';
+  }
+
+  function renderShortcuts() {
+    shortcutsEl.textContent = '';
+
+    SHORTCUTS.forEach(function (s, index) {
+      var wrap = document.createElement('div');
+      wrap.className = 'shortcut-wrap';
+
+      var link = document.createElement('a');
+      link.className = 'shortcut-item';
+      link.href = s.url;
+      link.title = s.name + ' — ' + s.url;
+      link.setAttribute('aria-label', s.name);
+
+      var tile = document.createElement('span');
+      tile.className = 'shortcut-tile tone-' + (s.tone == null ? toneForUrl(s.url) : s.tone);
+      tile.textContent = s.icon || shortcutIcon(s.name);
+      var host = hostOfUrl(s.url);
+      if (host) tile.setAttribute('data-host', host);
+      var label = document.createElement('span');
+      label.className = 'shortcut-label';
+      label.textContent = s.name;
+      link.appendChild(tile);
+      link.appendChild(label);
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        navigate(s.url);
+      });
+
+      var remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'shortcut-remove';
+      remove.textContent = '×';
+      remove.title = '删除 ' + s.name;
+      remove.setAttribute('aria-label', '删除快捷方式：' + s.name);
+      remove.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        SHORTCUTS.splice(index, 1);
+        persistShortcuts();
+        renderShortcuts();
+      });
+
+      wrap.appendChild(link);
+      wrap.appendChild(remove);
+      shortcutsEl.appendChild(wrap);
+    });
+
+    if (SHORTCUTS.length < MAX_SHORTCUTS) {
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'shortcut-item add';
+      addBtn.title = '添加快捷方式';
+      addBtn.setAttribute('aria-label', '添加快捷方式');
+      addBtn.innerHTML = '<span class="shortcut-tile">+</span>' +
+                         '<span class="shortcut-label">添加</span>';
+      addBtn.addEventListener('click', openShortcutDialog);
+      shortcutsEl.appendChild(addBtn);
+    }
+
+    // 渲染完就顺带向宿主索要已缓存的站点图标（拿不到的主机保持字标）
+    requestFavicons();
+  }
 
   /* ------------------------------------------------------------------------
-     e) 隐私统计卡：桩数据 + count-up（800ms ease-out），预留 getStats 通道
+     d2) 站点图标：只读宿主本地缓存（WebView2 已取回的 favicon）
+     不请求 favicon.ico、不走第三方图标服务——访问过的站才有图，这是设计结果。
      ------------------------------------------------------------------------ */
 
-  var stats = { ads: 0 }; // 有桥时由宿主真实数据覆盖
-  var statAdsEl = document.getElementById('stat-ads');
-
-  function fmt(n) { return n.toLocaleString('en-US'); }
-
-  function countUp(el, target, duration) {
-    if (reducedMotion || duration <= 0) {
-      el.textContent = fmt(target);
-      return;
+  function hostOfUrl(url) {
+    try {
+      return new URL(url).hostname.toLowerCase();
+    } catch (_) {
+      return '';
     }
-    var t0 = performance.now();
-    function tick(t) {
-      var p = Math.min(1, (t - t0) / duration);
-      var eased = 1 - Math.pow(1 - p, 3); // ease-out
-      el.textContent = fmt(Math.round(target * eased));
-      if (p < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
   }
 
-  function animateStats() {
-    countUp(statAdsEl, stats.ads, 800);
+  function requestFavicons() {
+    var hosts = [];
+    function add(host) {
+      if (host && hosts.indexOf(host) < 0 && hosts.length < 32) hosts.push(host);
+    }
+
+    SHORTCUTS.forEach(function (s) { add(hostOfUrl(s.url)); });
+    Object.keys(ENGINE_HOSTS).forEach(function (id) {
+      ENGINE_HOSTS[id].forEach(add);
+    });
+
+    if (!hosts.length) return;
+    bridgeSend({ type: 'getFavicons', hosts: hosts });
   }
 
-  bridgeSend({ type: 'getStats' });
+  // 引擎图标缺失时向宿主申请一次性抓取；同一主机本页只申请一次，失败不重试。
+  // 真正的开关与白名单在宿主侧判定，页面无法越权指定主机。
+  var engineIconRequested = {};
+
+  function requestEngineIconIfMissing() {
+    var eng = ENGINES[engineIndex];
+    if (engineFaviconUrl(eng)) return;
+
+    var host = (ENGINE_HOSTS[eng.id] || [])[0];
+    if (!host || engineIconRequested[host]) return;
+    engineIconRequested[host] = true;
+    bridgeSend({ type: 'fetchEngineIcon', host: host });
+  }
+
+  function applyFavicons(icons) {
+    if (!icons) return;
+
+    Object.keys(icons).forEach(function (host) {
+      if (typeof icons[host] === 'string') faviconMap[host] = icons[host];
+    });
+    applyEngine(); // 引擎徽标与快捷方式同源，一次回复同时刷新
+    requestEngineIconIfMissing();
+
+    var tiles = document.querySelectorAll('.shortcut-tile[data-host]');
+    Array.prototype.forEach.call(tiles, function (tile) {
+      var src = icons[tile.getAttribute('data-host')];
+      if (!src || tile.getAttribute('data-icon-src') === src) return;
+      tile.setAttribute('data-icon-src', src);
+
+      var img = document.createElement('img');
+      img.className = 'shortcut-favicon';
+      img.alt = '';
+      img.src = src;
+      tile.textContent = '';
+      tile.appendChild(img);
+    });
+  }
+
+  function openShortcutDialog() {
+    if (!shortcutDialog || typeof shortcutDialog.showModal !== 'function') return;
+    shortcutForm.reset();
+    shortcutError.textContent = '';
+    shortcutDialog.showModal();
+    shortcutName.focus();
+  }
+
+  if (shortcutForm) {
+    shortcutForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var url = normalizeShortcutUrl(shortcutUrl.value);
+      if (!url) {
+        shortcutError.textContent = '请输入有效的 http/https 网址。';
+        shortcutUrl.focus();
+        return;
+      }
+
+      if (SHORTCUTS.some(function (s) { return s.url === url; })) {
+        shortcutError.textContent = '该网址已在快捷方式中。';
+        shortcutUrl.focus();
+        return;
+      }
+
+      var name = shortcutName.value.trim().slice(0, 24);
+      if (!name) name = new URL(url).hostname.replace(/^www\./i, '');
+      SHORTCUTS.push({
+        name: name,
+        url: url,
+        icon: shortcutIcon(name),
+        tone: toneForUrl(url)
+      });
+      persistShortcuts();
+      renderShortcuts();
+      shortcutDialog.close();
+    });
+
+    shortcutCancel.addEventListener('click', function () { shortcutDialog.close(); });
+    shortcutDialog.addEventListener('click', function (e) {
+      if (e.target === shortcutDialog) shortcutDialog.close();
+    });
+    shortcutDialog.addEventListener('close', function () { shortcutError.textContent = ''; });
+  }
+
   bridgeListen(function (msg) {
-    if (msg && msg.type === 'stats' && typeof msg.ads === 'number') {
-      stats.ads = msg.ads;
-      animateStats();
-    }
+    if (msg && msg.type === 'favicons') applyFavicons(msg.icons);
   });
-  animateStats();
+
+  renderShortcuts();
 
   /* ------------------------------------------------------------------------
-     f) 壁纸：6 张内置 CSS 渐变 + 本地图片（file 选择 / 拖入），选择持久化
+     e) 壁纸：6 张内置 CSS 渐变 + 本地图片（file 选择 / 拖入），选择持久化
      ------------------------------------------------------------------------ */
 
   // 第 0 张与 style.css / index.html 内嵌关键 CSS 中的默认壁纸数值一致

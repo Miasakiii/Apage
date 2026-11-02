@@ -52,26 +52,44 @@
     <div id="date">&nbsp;</div>
   </div>
 
-  <!-- c) 搜索框 -->
+  <!-- c) 搜索框：白色大圆角主控件（参考夸克的视觉权重），左侧引擎、右侧提交 -->
   <form id="search-form" role="search">
     <button id="engine-btn" type="button" title="点击切换搜索引擎" aria-label="切换搜索引擎">
       <span class="engine-icon" id="engine-icon">度</span>
     </button>
     <input id="search-input" type="text" placeholder="搜索或输入网址" autocomplete="off" autofocus>
+    <button id="search-submit" type="submit" title="搜索" aria-label="搜索">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 19V5"/>
+        <path d="M6 11l6-6 6 6"/>
+      </svg>
+    </button>
   </form>
 
-  <!-- d) 快捷方式（桩数据，JS 渲染） -->
+  <!-- d) 快捷方式（JS 渲染，可本地增删并持久化） -->
   <nav id="shortcuts" aria-label="快捷方式"></nav>
-
-  <!-- e) 隐私统计卡 -->
-  <div id="stats-card" role="status">
-    <svg class="shield-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M12 2l8 3v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V5l8-3z"/>
-      <path d="M9 12l2 2 4-4"/>
-    </svg>
-    <span>本周已拦截&nbsp;<span class="stat-num" id="stat-ads">0</span>&nbsp;个广告</span>
-  </div>
 </main>
+
+<!-- d) 快捷方式新增面板：必须是 body 直接子节点。
+     #content 带 transform（入场动画），会给 position:fixed 后代建立包含块，
+     对话框留在其中会按 #content 的盒子定位而偏到左上角，遮罩也盖不满视口。 -->
+<dialog id="shortcut-dialog" aria-labelledby="shortcut-dialog-title">
+  <form id="shortcut-form" method="dialog" autocomplete="off">
+    <h2 id="shortcut-dialog-title">添加快捷方式</h2>
+    <label>名称
+      <input id="shortcut-name" type="text" maxlength="24" placeholder="例如 GitHub">
+    </label>
+    <label>网址
+      <input id="shortcut-url" type="text" maxlength="2048" placeholder="example.com" required>
+    </label>
+    <p id="shortcut-error" role="alert"></p>
+    <div id="shortcut-actions">
+      <button id="shortcut-cancel" type="button">取消</button>
+      <button id="shortcut-save" type="submit">添加</button>
+    </div>
+  </form>
+</dialog>
 
 <!-- f) 壁纸面板：底部滑出 -->
 <div id="wallpaper-panel" role="dialog" aria-label="壁纸设置">
