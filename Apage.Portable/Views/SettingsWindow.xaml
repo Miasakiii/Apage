@@ -75,23 +75,10 @@
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
 
-                        <Grid Margin="0,12,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="拦截第三方 Cookie"
-                                           Foreground="{DynamicResource Apage.Brush.TextPrimary}"/>
-                                <TextBlock Text="仅剥离第三方子资源请求中的 Cookie；即时生效"
-                                           Margin="0,2,0,0"
-                                           FontSize="{DynamicResource Apage.FontSize.Xs}"
-                                           Foreground="{DynamicResource Apage.Brush.TextTertiary}"/>
-                            </StackPanel>
-                            <ToggleButton x:Name="ThirdPartyCookieToggle" Grid.Column="1"
-                                          Style="{StaticResource Apage.Style.Toggle}"
-                                          VerticalAlignment="Center"/>
-                        </Grid>
+                        <TextBlock Margin="0,10,0,0" TextWrapping="Wrap"
+                                   FontSize="{DynamicResource Apage.FontSize.Xs}"
+                                   Foreground="{DynamicResource Apage.Brush.TextTertiary}"
+                                   Text="第三方 Cookie 隔离：当前 WebView2 无可靠阻断入口，本版本不提供该项能力，也不计入追踪统计。"/>
 
                         <Grid Margin="0,14,0,0">
                             <Grid.ColumnDefinitions>

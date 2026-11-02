@@ -129,7 +129,6 @@ public partial class SettingsWindow : Window
         if (SearchEngineBox.SelectedItem == null)
             SearchEngineBox.SelectedIndex = 0;
 
-        ThirdPartyCookieToggle.IsChecked = source.BlockThirdPartyCookies;
         DntToggle.IsChecked = source.SendDoNotTrack;
         GpcToggle.IsChecked = source.SendGPC;
         WebRtcToggle.IsChecked = source.WebRTCIPProtection;
@@ -139,7 +138,6 @@ public partial class SettingsWindow : Window
     private void CaptureUi(AppSettings target)
     {
         target.SearchEngine = (SearchEngineBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "bing";
-        target.BlockThirdPartyCookies = ThirdPartyCookieToggle.IsChecked == true;
         target.SendDoNotTrack = DntToggle.IsChecked == true;
         target.SendGPC = GpcToggle.IsChecked == true;
         target.WebRTCIPProtection = WebRtcToggle.IsChecked == true;
@@ -220,7 +218,6 @@ public partial class SettingsWindow : Window
     {
         target.SearchEngine = source.SearchEngine;
         target.PortableCache = source.PortableCache;
-        target.BlockThirdPartyCookies = source.BlockThirdPartyCookies;
         target.SendDoNotTrack = source.SendDoNotTrack;
         target.SendGPC = source.SendGPC;
         target.WebRTCIPProtection = source.WebRTCIPProtection;

@@ -34,6 +34,17 @@ public class AdBlockRuleEngineTests
     }
 
     [Fact]
+    public void IsBlocked_DomainAnchorNormalizesUserInfoAndDnsRootDot()
+    {
+        var engine = new AdBlockRuleEngine();
+        engine.AddRule("||ads.example.com^");
+
+        Assert.True(engine.IsBlocked("https://user:secret@ads.example.com/banner.js"));
+        Assert.True(engine.IsBlocked("https://ads.example.com./banner.js"));
+        Assert.False(engine.IsBlocked("https://example.com./banner.js"));
+    }
+
+    [Fact]
     public void IsBlocked_SeparatorCaret_MatchesQueryAndEndOfUrl()
     {
         // spike 建议 #3 的坑位：^ 消费一个字符，也要能匹配 URL 末尾

@@ -7,7 +7,7 @@
 ## 特性
 
 - **极致轻量** — 发布目标为 x64 单文件 EXE、签名后 <5MB、窗口可见 <1秒
-- **隐私默认全开** — DNT/GPC、PSL 精确第三方判定、第三方 Cookie 控制与 WebRTC 防护默认开启；内置 EasyList/EasyPrivacy 兼容快照
+- **隐私默认全开** — DNT/GPC、WebRTC 防护与 EasyList/EasyPrivacy 兼容快照默认启用；所有隐私声明以可复现验证为准
 - **全本地化** — 零遥测、零后台请求、零数据收集
 - **无需登录** — 不强制账号，不要求云同步
 - **Portable** — 数据跟程序走，U盘即插即用（前提：目标机已装 WebView2 Runtime，Win11 默认预装）
@@ -16,12 +16,13 @@
 
 ## 发布现状（2026-11-02）
 
-- **S0–S3 功能包已完成**（D1/A1/B1/C1/A2/D2/B2/A3/S3）：**287 项 Core 单测**、五条红线、Release 构建、五信号 smoke、真实数据往返、查找条与提示条布局探针全部通过。
-- **生产单文件与发布门禁**：`build\package.ps1` 产出 **1 文件 / 4,060,160 字节** 的 `Apage.Portable.exe`（版本 0.1.0.0，SHA-256 `5D1557…3140F6`），并生成 release manifest 与独立 legal bundle。尚未签名，最终签名与签名后复验属 S4。
-- **隐私资产已闭环**：PSL `2026-10-28` 版本替换末两标签近似；内置 EasyList/EasyPrivacy 快照 **94,646 条**通过 SHA-256 校验，MIT/MPL/CC 许可全文随包；运行时零自动更新请求。
+- **S0–S3 功能包已完成**（D1/A1/B1/C1/A2/D2/B2/A3/S3），P0/P1 硬化切片已落地：**305 项 Core 单测**、五条红线、Release 构建、五信号 smoke、真实数据往返、查找条与提示条布局探针通过。
+- **隐私承诺纠偏**：真机探针证实 `WebResourceRequested` 删除 Cookie 后 WebView2 网络栈仍会重新发送，**“第三方 Cookie 剥离/追踪计数”已从能力、设置、NTP/隐私盾与宣传中移除**；旧字段仅保留兼容且默认 `false`。证据见 [Cookie 探针](docs/spikes/results/cookie-privacy.md) 与 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)。
+- **生产单文件与发布门禁**：`build\package.ps1` 产出 **1 文件 / 4,068,352 字节** 的 `Apage.Portable.exe`（版本 0.1.0.0，SHA-256 `573E5F52…9E582FEE`），并生成 release manifest 与独立 legal bundle。本轮打包为 `-SkipStartupBench` 调试验收；尚未签名，最终干净工作区打包、启动门禁、签名与签名后复验属 S4。
+- **隐私资产已闭环**：PSL `2026-10-28` 版本；内置 EasyList/EasyPrivacy 快照 **94,646 条**通过 SHA-256 校验，MIT/MPL/CC 许可全文随包；运行时零自动更新请求。
 - **启动指标（2026-11-02，负载条件）**：首启 ContentRendered **1077.5ms**，热启中位 **939.15ms**，在开机后约 **33%–36% CPU** 占用下以 60.85ms 余量通过本机 1000ms 门禁。该结果**不是安静参考机结论**，首启仍超过 1 秒；正式发布须在稳定参考环境复测。
-- **数据、查找与规则更新已闭环**：书签/历史/下载落 SQLite（隐私标签不记历史），支持 Chrome/Edge 书签 HTML 导入；地址栏本地建议与 Ctrl+F 页内查找可用；规则更新仅在设置里手动点击触发，HTTPS 限时限大小、校验后原子替换、失败保留旧规则。
-- **证据与后续顺序**：见 [S4 启动复验记录](docs/design/2026-11-02-s4-startup-recheck.md)、[B2/A3 实施记录](docs/design/2026-10-29-b2-data-a3-rule-update.md)、[D2 发布工程记录](docs/design/2026-10-29-d2-release-engineering.md)、[签名手册](docs/release/signing.md)、[A2 实施记录](docs/design/2026-10-29-a2-psl-rule-snapshot.md)、[S2 第一批实施记录](docs/design/2026-10-29-s2-first-slice.md)、[S1 验证结果](docs/spikes/results/single-file.md) 与 [v0.1 发布收敛计划](docs/design/2026-10-28-v01-release-convergence.md)。
+- **数据、查找与规则更新已闭环**：书签/历史/下载落 SQLite（隐私标签不记历史），支持 Chrome/Edge 书签 HTML 导入；地址栏本地建议与 Ctrl+F 页内查找可用；规则更新仅在设置里手动点击触发，逐跳 HTTPS、全程串行、校验后原子替换，热更新保留 `adblock/*.txt` 用户规则。
+- **证据与后续顺序**：见 [P0/P1 硬化记录](docs/design/2026-11-02-p0-p1-hardening.md)、[S4 硬化验证](docs/design/2026-11-02-s4-hardening-validation.md)、[Cookie 探针](docs/spikes/results/cookie-privacy.md)、[S4 启动复验记录](docs/design/2026-11-02-s4-startup-recheck.md)、[B2/A3 实施记录](docs/design/2026-10-29-b2-data-a3-rule-update.md)、[D2 发布工程记录](docs/design/2026-10-29-d2-release-engineering.md)、[签名手册](docs/release/signing.md)、[A2 实施记录](docs/design/2026-10-29-a2-psl-rule-snapshot.md)、[S2 第一批实施记录](docs/design/2026-10-29-s2-first-slice.md)、[S1 验证结果](docs/spikes/results/single-file.md) 与 [v0.1 发布收敛计划](docs/design/2026-10-28-v01-release-convergence.md)。
 
 ## 技术栈
 
@@ -30,7 +31,7 @@
 | 层级 | 便携版（Apage.Portable，主力） |
 |------|------------------------------|
 | 运行时 | .NET Framework 4.8（Win10/11 系统自带） |
-| 体积 | 发布目标：签名后 <5MB；当前未签名产物实测 4,060,160 字节单 EXE |
+| 体积 | 发布目标：签名后 <5MB；当前未签名产物实测 4,068,352 字节单 EXE |
 | 定位 | U盘即插即用（前提：已装 WebView2 Runtime） |
 | 共享层 | Apage.Core（.NET Standard 2.0，为未来桌面版衍生预留） |
 | UI | WPF（当前 code-behind；MVVM 分层为预留，当前未引入 MVVM 包） |
@@ -129,7 +130,7 @@ build/build.sh            # 默认 Release
 build/build.sh Debug
 ```
 
-**冒烟验证**：构建成功后可一条命令跑发布线冒烟检查（[`build/smoke.ps1`](build/smoke.ps1)）：以 `--smoke` 模式拉起 Apage.Portable，验证 **应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 / SQLite 安全初始化 / PSL 与规则快照加载** 五个信号，并在首帧后真实构建设置与数据窗口、执行一次书签/历史数据往返；CI 在 portable 构建步骤之后自动运行：
+**冒烟验证**：构建成功后可一条命令跑发布线冒烟检查（[`build/smoke.ps1`](build/smoke.ps1)）：以 `--smoke` 模式拉起 Apage.Portable，验证 **应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 / SQLite 安全初始化 / PSL 与规则快照加载** 五个信号，并在首帧后真实构建设置与数据窗口、执行书签/历史数据往返、Ctrl+F/Toast 布局探针与 NTP getStats 来源门控探针；CI 在 portable 构建步骤之后自动运行：
 
 ```powershell
 build\smoke.ps1                       # 默认 Release
@@ -167,7 +168,7 @@ dotnet build Apage.Core/Apage.Core.csproj -c Release
 # 发布便携版（D1 已完成；签名与最终复验属 S4）
 # .NET FX 4.8 不支持 PublishSingleFile；生产使用 Costura + NativeBootstrap
 # build\build.ps1 的 bin 目录仍是多文件调试布局；正式分发以 package.ps1 的单 EXE 为准
-# 发布产物：artifacts\portable\Apage.Portable.exe（1 文件，当前 4,060,160 字节，版本 0.1.0.0）
+# 发布产物：artifacts\portable\Apage.Portable.exe（1 文件，当前 4,068,352 字节，版本 0.1.0.0）
 ```
 
 > **发布说明**：v0.1~v1.0 单押便携版（Apage.Portable），基于 .NET Framework 4.8（Win10/11 系统自带）实现真即插即用（前提：目标机已装 WebView2 Runtime）。桌面版（Apage.Desktop，.NET 8 自包含）暂缓，仅便携版验证 PMF 后条件启动。Apage.Core（.NET Standard 2.0）保留分层以备未来衍生。详见 [docs/product-design.md](docs/product-design.md)。

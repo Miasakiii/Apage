@@ -146,6 +146,28 @@ public sealed class RuleSnapshotTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_dir, RuleSnapshotStore.RulesFileName + ".bak")));
     }
 
+    [Fact]
+    public void Store_RestorePrevious_RollsBackWholePair()
+    {
+        RuleSnapshotStore.Save(_dir, BuildSnapshot(1100, "first"), DateTimeOffset.UtcNow);
+        RuleSnapshotStore.Save(_dir, BuildSnapshot(1300, "second"), DateTimeOffset.UtcNow);
+
+        Assert.True(RuleSnapshotStore.TryRestorePrevious(_dir, hadPrevious: true));
+        var restored = RuleSnapshotStore.TryLoad(_dir);
+
+        Assert.True(restored.Loaded);
+        Assert.Equal(1100, restored.Manifest!.Rules.AcceptedRules);
+    }
+
+    [Fact]
+    public void Store_RestorePrevious_WithNoPriorSnapshot_RemovesNewPair()
+    {
+        RuleSnapshotStore.Save(_dir, BuildSnapshot(1200), DateTimeOffset.UtcNow);
+
+        Assert.True(RuleSnapshotStore.TryRestorePrevious(_dir, hadPrevious: false));
+        Assert.False(RuleSnapshotStore.HasSnapshot(_dir));
+    }
+
     // ===== provider =====
 
     [Fact]
@@ -230,13 +252,107 @@ public sealed class RuleSnapshotTests : IDisposable
         Assert.Null(provider.Current);
     }
 
+    [Fact]
+    public async Task Update_Success_PreservesUserRules()
+    {
+        var userRuleDirectory = Path.Combine(_dir, "adblock");
+        Directory.CreateDirectory(userRuleDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(userRuleDirectory, "custom.txt"),
+            "||custom-ads.example^\n");
+
+        var provider = new AdBlockRuleProvider(
+            new AdBlockRuleEngine(),
+            new AdBlockRuleSnapshotInfo("builtin", 0, 0, null, null));
+        var service = BuildService(
+            provider,
+            (source, ct) => Task.FromResult(RuleText(1200, source.Name)),
+            userRuleDirectory);
+
+        var outcome = await service.UpdateAsync();
+
+        Assert.True(outcome.Succeeded);
+        Assert.True(provider.Current!.IsBlocked("https://custom-ads.example/banner.js"));
+    }
+
+    [Fact]
+    public async Task Update_UnreadableUserRules_FailsBeforeReplacingProvider()
+    {
+        var userRuleDirectory = Path.Combine(_dir, "adblock");
+        Directory.CreateDirectory(userRuleDirectory);
+        var rulePath = Path.Combine(userRuleDirectory, "custom.txt");
+        await File.WriteAllTextAsync(rulePath, "||custom.example^\n");
+
+        var original = new AdBlockRuleEngine();
+        original.AddRule("||keep.example^");
+        var provider = new AdBlockRuleProvider(
+            original,
+            new AdBlockRuleSnapshotInfo("builtin", 1, 0, null, null));
+        var downloadCalled = false;
+        var service = BuildService(provider, (source, ct) =>
+        {
+            downloadCalled = true;
+            return Task.FromResult(RuleText(1200, source.Name));
+        }, userRuleDirectory);
+
+        RuleUpdateOutcome outcome;
+        using (File.Open(rulePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            outcome = await service.UpdateAsync();
+        }
+
+        Assert.False(outcome.Succeeded);
+        Assert.False(downloadCalled);
+        Assert.Same(original, provider.Current);
+    }
+
+    [Fact]
+    public async Task Update_ConcurrentCalls_AreSerializedEndToEnd()
+    {
+        var provider = new AdBlockRuleProvider(
+            new AdBlockRuleEngine(),
+            new AdBlockRuleSnapshotInfo("builtin", 0, 0, null, null));
+        var concurrent = 0;
+        var maxConcurrent = 0;
+        var service = BuildService(provider, async (source, ct) =>
+        {
+            var current = Interlocked.Increment(ref concurrent);
+            InterlockedExtensions.Max(ref maxConcurrent, current);
+            await Task.Delay(30, ct);
+            Interlocked.Decrement(ref concurrent);
+            return RuleText(1200, source.Name);
+        });
+
+        var results = await Task.WhenAll(service.UpdateAsync(), service.UpdateAsync());
+
+        Assert.All(results, x => Assert.True(x.Succeeded));
+        Assert.Equal(1, maxConcurrent);
+    }
+
     private RuleUpdateService BuildService(
         AdBlockRuleProvider provider,
-        Func<RuleUpdateSource, CancellationToken, Task<string>> download)
+        Func<RuleUpdateSource, CancellationToken, Task<string>> download,
+        string? userRuleDirectory = null)
     {
         // 单来源，避免默认双列表把同一份假数据算两次
         var sources = new[] { new RuleUpdateSource("Test", "https://test.example/list.txt") };
-        return new RuleUpdateService(Path.Combine(_dir, "privacy"), provider, download, null, sources);
+        return new RuleUpdateService(
+            Path.Combine(_dir, "privacy"), provider, download, null, sources, userRuleDirectory);
+    }
+
+    private static class InterlockedExtensions
+    {
+        public static void Max(ref int target, int value)
+        {
+            var current = Volatile.Read(ref target);
+            while (value > current)
+            {
+                var seen = Interlocked.CompareExchange(ref target, value, current);
+                if (seen == current)
+                    return;
+                current = seen;
+            }
+        }
     }
 
     private static string RuleText(int count, string prefix = "r")

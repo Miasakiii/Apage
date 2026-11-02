@@ -35,6 +35,7 @@ public sealed class BookmarkRepositoryTests : IDisposable
     [Theory]
     [InlineData("https://Example.COM/Path", "https://example.com/Path")]
     [InlineData("https://example.com:443/a#frag", "https://example.com/a")]
+    [InlineData("https://user:secret@Example.com/path", "https://example.com/path")]
     [InlineData("http://example.com:80", "http://example.com/")]
     [InlineData("https://例子.测试", "https://xn--fsqu00a.xn--0zwm56d/")]
     public void UrlKey_NormalizesSchemeHostPortAndFragment(string input, string expected)

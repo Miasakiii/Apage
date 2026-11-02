@@ -160,8 +160,7 @@
      e) 隐私统计卡：桩数据 + count-up（800ms ease-out），预留 getStats 通道
      ------------------------------------------------------------------------ */
 
-  var stats = { trackers: 1283, ads: 342 }; // 桩数据，有桥时由宿主真实数据覆盖
-  var statTrackersEl = document.getElementById('stat-trackers');
+  var stats = { ads: 0 }; // 有桥时由宿主真实数据覆盖
   var statAdsEl = document.getElementById('stat-ads');
 
   function fmt(n) { return n.toLocaleString('en-US'); }
@@ -182,15 +181,12 @@
   }
 
   function animateStats() {
-    countUp(statTrackersEl, stats.trackers, 800);
     countUp(statAdsEl, stats.ads, 800);
   }
 
   bridgeSend({ type: 'getStats' });
   bridgeListen(function (msg) {
-    if (msg && msg.type === 'stats'
-        && typeof msg.trackers === 'number' && typeof msg.ads === 'number') {
-      stats.trackers = msg.trackers;
+    if (msg && msg.type === 'stats' && typeof msg.ads === 'number') {
       stats.ads = msg.ads;
       animateStats();
     }

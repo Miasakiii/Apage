@@ -1,8 +1,11 @@
 #nullable enable
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Apage.Core.Data;
 using Apage.Core.Services;
 using Microsoft.Web.WebView2.Core;
@@ -26,6 +29,11 @@ namespace Apage.Portable.Services
         private readonly ConcurrentDictionary<string, DateTimeOffset> _lastProgressWrite =
             new ConcurrentDictionary<string, DateTimeOffset>(StringComparer.Ordinal);
 
+        // 每个下载 id 一条串行写链：WebView2 事件可在 StartAsync 落库前到达，
+        // 直接 fire-and-forget 会让终态 UPDATE 先执行并命中 0 行，随后 Start 又插入 in_progress。
+        private readonly object _writeChainGate = new();
+        private readonly Dictionary<string, Task> _writeChains = new(StringComparer.Ordinal);
+
         public DownloadCoordinator(DownloadRepository repository, LocalLogService log)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -48,7 +56,9 @@ namespace Apage.Portable.Services
             var path = operation.ResultFilePath;
             var total = unchecked((long)(operation.TotalBytesToReceive ?? 0));
 
-            _ = RunAsync(_repository.StartAsync(id, uri, path, total), "download-start");
+            Enqueue(id,
+                async () => { await _repository.StartAsync(id, uri, path, total).ConfigureAwait(false); },
+                "download-start");
             _log.Write(LocalLogLevel.Info, "download", $"started; total={total}");
 
             operation.BytesReceivedChanged += (s, e) => OnProgress(id, operation);
@@ -107,7 +117,7 @@ namespace Apage.Portable.Services
                 _lastProgressWrite[id] = now;
                 var received = operation.BytesReceived;
                 var total = unchecked((long)(operation.TotalBytesToReceive ?? 0));
-                _ = RunAsync(_repository.UpdateProgressAsync(id, received, total), "download-progress");
+                Enqueue(id, () => _repository.UpdateProgressAsync(id, received, total), "download-progress");
             }
             catch (Exception ex)
             {
@@ -124,7 +134,7 @@ namespace Apage.Portable.Services
                     case CoreWebView2DownloadState.Completed:
                         _active.TryRemove(id, out _);
                         _lastProgressWrite.TryRemove(id, out _);
-                        _ = RunAsync(_repository.MarkCompletedAsync(id, operation.ResultFilePath), "download-complete");
+                        Enqueue(id, () => _repository.MarkCompletedAsync(id, operation.ResultFilePath), "download-complete", final: true);
                         _log.Write(LocalLogLevel.Info, "download", "completed");
                         Changed?.Invoke(this, EventArgs.Empty);
                         break;
@@ -135,12 +145,12 @@ namespace Apage.Portable.Services
                         var reason = operation.InterruptReason;
                         if (reason == CoreWebView2DownloadInterruptReason.UserCanceled)
                         {
-                            _ = RunAsync(_repository.MarkCanceledAsync(id), "download-canceled");
+                            Enqueue(id, () => _repository.MarkCanceledAsync(id), "download-canceled", final: true);
                             _log.Write(LocalLogLevel.Info, "download", "canceled");
                         }
                         else
                         {
-                            _ = RunAsync(_repository.MarkFailedAsync(id, reason.ToString()), "download-interrupted");
+                            Enqueue(id, () => _repository.MarkFailedAsync(id, reason.ToString()), "download-interrupted", final: true);
                             _log.Write(LocalLogLevel.Warning, "download", "interrupted; reason=" + reason);
                         }
                         Changed?.Invoke(this, EventArgs.Empty);
@@ -153,13 +163,42 @@ namespace Apage.Portable.Services
             }
         }
 
-        private async System.Threading.Tasks.Task RunAsync(
-            System.Threading.Tasks.Task task,
-            string operation)
+        // 把同一 id 的仓储写入串成任务链；前一步失败也继续执行后续步骤，
+        // 但每一步的异常都写诊断，避免单个 IO 故障阻断终态。
+        private void Enqueue(string id, Func<Task> action, string operation, bool final = false)
         {
+            Task next;
+            lock (_writeChainGate)
+            {
+                _writeChains.TryGetValue(id, out var previous);
+                next = RunChainedAsync(previous ?? Task.CompletedTask, action, operation);
+                _writeChains[id] = next;
+            }
+
+            if (!final)
+                return;
+
+            _ = next.ContinueWith(completed =>
+            {
+                lock (_writeChainGate)
+                {
+                    if (_writeChains.TryGetValue(id, out var current) &&
+                        ReferenceEquals(current, completed))
+                    {
+                        _writeChains.Remove(id);
+                    }
+                }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+
+        private async Task RunChainedAsync(Task previous, Func<Task> action, string operation)
+        {
+            try { await previous.ConfigureAwait(false); }
+            catch { /* 前序步骤已记录，后续步骤仍需尝试 */ }
+
             try
             {
-                await task.ConfigureAwait(false);
+                await action().ConfigureAwait(false);
             }
             catch (Exception ex)
             {

@@ -54,7 +54,8 @@ dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj
 ```powershell
 # 发布线冒烟验证（需先 build\build.ps1 构建成功）：以 --smoke 模式拉起 Apage.Portable，
 # 验证 应用可启动 / 主窗口可呈现 / WebView2 内核可初始化 / SQLite 安全初始化 /
-# PSL 与内置规则快照加载 五信号，并真实构建设置窗口；CI 在 portable 构建步骤之后自动运行。
+# PSL 与内置规则快照加载 五信号，并真实构建设置窗口、执行数据往返、
+# Ctrl+F/Toast 布局探针与 NTP getStats 来源门控探针；CI 在 portable 构建步骤之后自动运行。
 build\smoke.ps1
 ```
 
@@ -67,7 +68,7 @@ build\package.ps1 -SkipBuild -SkipStartupBench       # 调试用，不得用于�
 ```
 
 - 只测 `Apage.Core` 的纯逻辑（决策 #18：Core 层纯逻辑优先单测）。
-- 现有可测目标：`AppPaths`（缓存目录 R7 策略）、`AppSettings`（隐私默认全开基线）、`SettingsService`（原子写 / 损坏 JSON 回落默认）、`SessionService`（会话原子写 / 损坏回落空 / URL 可恢复过滤 + 索引收敛）、`ScriptMetadataParser`（TM 兼容元数据块解析 / 导入校验顺序 / 零网络字段忽略 / @run-at 回落默认）、`ScriptMatcher`（@match/@include URL 匹配 / 排除优先级 / 非法模式丢弃）、`AdBlockRuleEngine`（ABP 规则关键子串索引匹配 / @@ 例外规则 / ## 化妆规则分桶 / 不可信规则防护：超长拒收 + 100ms 正则超时 / 不支持修饰符 fail-closed）、`PrivacyStatsState`（周一边界 / 跨周滚存）、`PrivacyStatsService`（损坏回落 / 原子写 / 跨周归零 / 并发自增 / 短周期批量落盘）、`ThirdPartyDetector`（末两标签近似 / 漏判不误判方向）、`SqliteDatabase`（PRAGMA 基线 / 事务迁移 / 迁移前备份 / 损坏不删库 / 并发初始化）、`LocalLogService`（滚动 / 导出 / URL 与 Cookie 脱敏 / IO 故障不抛）、`PublicSuffixList`（普通 / 通配 / 例外 / IDN / 尾点 / IP 回退）、`PrivacyAssets`（清单哈希 / PSL 版本 / 规则快照可执行性 / 许可资源）、`AdBlockRuleEngine.Classify`（快照与运行时共用规则边界）、`UrlKey`（http/https 判定 / 大小写与默认端口 / IDN 与尾点归一）、`BookmarkRepository` / `HistoryRepository` / `DownloadRepository`（CRUD / 去重 / 搜索转义 / 终态 / 异常退出残留 / 并发写）、`BookmarkHtmlImporter`（Netscape 格式容错 / 实体 / 截断 / 非法链接）、`RuleSnapshotBuilder` / `RuleSnapshotStore` / `RuleUpdateService`（共用筛选 / 原子替换与回滚 / 安全下限 / 失败不改动旧快照）、`FindBarState`（开关 / 计数收敛 / 文案 / 按键语义）、`OmniboxSuggestionService`（书签优先 / 历史补充 / 去重 / 上限）。
+- 现有可测目标：`AppPaths`（缓存目录 R7 策略）、`AppSettings`（隐私默认全开基线）、`SettingsService`（原子写 / 损坏 JSON 回落默认）、`SessionService`（会话原子写 / 损坏回落空 / URL 可恢复过滤 + 索引收敛）、`ScriptMetadataParser`（TM 兼容元数据块解析 / 导入校验顺序 / 零网络字段忽略 / @run-at 回落默认）、`ScriptMatcher`（@match/@include URL 匹配 / 排除优先级 / 非法模式丢弃）、`AdBlockRuleEngine`（ABP 规则关键子串索引匹配 / @@ 例外规则 / ## 化妆规则分桶 / 不可信规则防护：超长拒收 + 100ms 正则超时 / 不支持修饰符 fail-closed）、`PrivacyStatsState`（周一边界 / 跨周滚存）、`PrivacyStatsService`（损坏回落 / 原子写 / 跨周归零 / 并发自增 / 短周期批量落盘）、`ThirdPartyDetector`（末两标签近似 / 漏判不误判方向）、`SqliteDatabase`（PRAGMA 基线 / 事务迁移 / 迁移前备份 / 损坏不删库 / 并发初始化）、`LocalLogService`（滚动 / 导出 / URL 与 Cookie 脱敏 / IO 故障不抛）、`PublicSuffixList`（普通 / 通配 / 例外 / IDN / 尾点 / IP 回退）、`PrivacyAssets`（清单哈希 / PSL 版本 / 规则快照可执行性 / 许可资源）、`AdBlockRuleEngine.Classify`（快照与运行时共用规则边界）、`UrlKey`（http/https 判定 / 大小写与默认端口 / IDN 与尾点归一）、`BookmarkRepository` / `HistoryRepository` / `DownloadRepository`（CRUD / 去重 / 搜索转义 / 终态 / 异常退出残留 / 并发写）、`BookmarkHtmlImporter`（Netscape 格式容错 / 实体 / 截断 / 非法链接）、`RuleSnapshotBuilder` / `RuleSnapshotStore` / `RuleUpdateService`（共用筛选 / 原子替换与回滚 / 安全下限 / 失败不改动旧快照 / 用户规则保留 / 并发串行）、`AtomicJsonStore`（Replace/Copy 故障下保留唯一副本 / .bak/.tmp 恢复）、`UserRuleStore`（用户规则统一读取）、`FindBarState`（开关 / 计数收敛 / 文案 / 按键语义）、`OmniboxSuggestionService`（书签优先 / 历史补充 / 去重 / 上限）。
 - 测试文件与目标一一对应：`Apage.Core.Tests/<目标名>Tests.cs`（如 `ScriptMatcherTests.cs`）。新增 Core 纯逻辑时按此约定补单测。
 
 ## 环境要求
@@ -88,7 +89,7 @@ build\preflight.ps1
 ## 高风险区域 / 约定（改动前务必知晓）
 
 1. **不要把 `Apage.Portable.csproj` 的通配符 `Compile`/`Page` 展开成逐文件条目**。通配符是故意的，让并行智能体加 `.cs`/`.xaml` 无需改 csproj（见该文件注释）。新增源码/资源直接放目录即可被拾取；`App.xaml` 是 `ApplicationDefinition`，已从 `Page` glob 排除。
-2. **隐私默认全开是产品红线**（`AppSettings` 默认值）：`BlockThirdPartyCookies` / `SendDoNotTrack` / `SendGPC` / `WebRTCIPProtection` 默认 `true`，`OnlineSearchSuggestions` / `ClearOnExit` 默认 `false`。改默认值等于改产品定位，需先对齐 `docs/product-design.md`。
+2. **隐私默认全开是产品红线**（`AppSettings` 默认值）：`SendDoNotTrack` / `SendGPC` / `WebRTCIPProtection` 默认 `true`，`OnlineSearchSuggestions` / `ClearOnExit` / `BlockThirdPartyCookies` 默认 `false`。`BlockThirdPartyCookies` 是旧字段：真机探针已证伪事件级 Cookie 删除（见 `docs/spikes/results/cookie-privacy.md`），不得重新接线或宣传；改其他默认值等于改产品定位，需先对齐 `docs/product-design.md`。
 3. **便携运行时目录**（`data/` `cache/` `wallpapers/`）永不提交（已在 `.gitignore`）。缓存位置遵循风险 R7：默认写宿主机 `%TEMP%\Apage\cache`，纯便携模式才写 exe 同级 `cache/`。
 4. **零遥测 / 零后台请求**：不要引入任何遥测、崩溃上报、云同步或“检查更新”联网逻辑。
 5. **`Apage.Core` 保持 netstandard2.0**，不要引入依赖 Windows 或 .NET 8 专有 API 的包（否则破坏未来衍生分层）。
@@ -103,6 +104,9 @@ build\preflight.ps1
 | 路线图（阶段规划、任务清单、风险 R1–R13、决策 #1–#18） | [docs/roadmap.md](docs/roadmap.md) |
 | 脚本管理器（用户脚本运行时与管理器） | [docs/script-manager.md](docs/script-manager.md) |
 | v0.1 发布收敛计划（后续任务顺序、质量门禁、并行写域；当前优先执行依据） | [docs/design/2026-10-28-v01-release-convergence.md](docs/design/2026-10-28-v01-release-convergence.md) |
+| P0/P1 硬化记录（Cookie 能力纠偏、下载/会话/原子写/规则更新修复） | [docs/design/2026-11-02-p0-p1-hardening.md](docs/design/2026-11-02-p0-p1-hardening.md) |
+| Cookie 真机探针结论（事件级删除无效证据与复现） | [docs/spikes/results/cookie-privacy.md](docs/spikes/results/cookie-privacy.md) |
+| S4 硬化验证（真实更新、网络采样、SQLite/缓存/只读故障） | [docs/design/2026-11-02-s4-hardening-validation.md](docs/design/2026-11-02-s4-hardening-validation.md) |
 | S2 第一批实施记录（D1/A1/B1/C1 证据、限制与下一波） | [docs/design/2026-10-29-s2-first-slice.md](docs/design/2026-10-29-s2-first-slice.md) |
 | A2 PSL 与离线规则快照（来源、筛选、许可、体积） | [docs/design/2026-10-29-a2-psl-rule-snapshot.md](docs/design/2026-10-29-a2-psl-rule-snapshot.md) |
 | D2 发布工程（打包、启动门禁、许可包、CI） | [docs/design/2026-10-29-d2-release-engineering.md](docs/design/2026-10-29-d2-release-engineering.md) |

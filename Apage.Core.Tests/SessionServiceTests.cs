@@ -79,6 +79,20 @@ public sealed class SessionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAsync_CorruptedPrimary_RecoversFromBackup()
+    {
+        await File.WriteAllTextAsync(_file, "{ corrupted");
+        await File.WriteAllTextAsync(
+            _file + ".bak",
+            "{\"Tabs\":[{\"Url\":\"https://backup.example/\",\"Title\":\"B\"}],\"ActiveIndex\":0}");
+
+        var loaded = await new SessionService(_file).LoadAsync();
+
+        Assert.Single(loaded.Tabs);
+        Assert.Equal("https://backup.example/", loaded.Tabs[0].Url);
+    }
+
+    [Fact]
     public async Task SaveAsync_LeavesNoTempResidue()
     {
         var svc = new SessionService(_file);

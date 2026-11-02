@@ -76,13 +76,16 @@ public sealed class RuleUpdateService
     private readonly Func<RuleUpdateSource, CancellationToken, Task<string>> _download;
     private readonly Action<string>? _log;
     private readonly IReadOnlyList<RuleUpdateSource> _sources;
+    private readonly string? _userRuleDirectory;
+    private readonly SemaphoreSlim _updateGate = new SemaphoreSlim(1, 1);
 
     public RuleUpdateService(
         string snapshotDirectory,
         AdBlockRuleProvider provider,
         Func<RuleUpdateSource, CancellationToken, Task<string>> download,
         Action<string>? log = null,
-        IReadOnlyList<RuleUpdateSource>? sources = null)
+        IReadOnlyList<RuleUpdateSource>? sources = null,
+        string? userRuleDirectory = null)
     {
         _snapshotDirectory = string.IsNullOrWhiteSpace(snapshotDirectory)
             ? throw new ArgumentException("快照目录不能为空。", nameof(snapshotDirectory))
@@ -91,10 +94,40 @@ public sealed class RuleUpdateService
         _download = download ?? throw new ArgumentNullException(nameof(download));
         _log = log;
         _sources = sources ?? RuleUpdateSources.Default;
+        _userRuleDirectory = userRuleDirectory;
     }
 
+    /// <summary>
+    /// 手动更新入口。整个“读用户规则 → 下载 → 构建 → 落盘 → 回读 → 热替换”流程串行化：
+    /// 多个设置窗口或其他调用方不能交错替换 rules.txt / rules.json。
+    /// </summary>
     public async Task<RuleUpdateOutcome> UpdateAsync(CancellationToken cancellationToken = default)
     {
+        await _updateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await UpdateCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _updateGate.Release();
+        }
+    }
+
+    private async Task<RuleUpdateOutcome> UpdateCoreAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> userRules;
+        try
+        {
+            // 在下载和替换之前读取：后续只做纯内存合并，不会在提交后因文件 IO 失败而丢规则。
+            userRules = UserRuleStore.LoadAll(_userRuleDirectory);
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke("rule-update-user-rules-failed:" + ex.GetType().Name);
+            return RuleUpdateOutcome.Fail("读取本地用户规则失败，现有规则未改动。");
+        }
+
         var texts = new List<RuleTextSource>(_sources.Count);
         foreach (var source in _sources)
         {
@@ -127,6 +160,7 @@ public sealed class RuleUpdateService
                 $"{RuleSnapshotBuilder.MinimumAcceptedRules}），现有规则未改动。");
         }
 
+        var hadPreviousSnapshot = RuleSnapshotStore.HasSnapshot(_snapshotDirectory);
         try
         {
             RuleSnapshotStore.Save(_snapshotDirectory, result, generatedAt);
@@ -138,10 +172,22 @@ public sealed class RuleUpdateService
         }
 
         var reloaded = RuleSnapshotStore.TryLoad(_snapshotDirectory);
-        if (!reloaded.Loaded)
+        if (!reloaded.Loaded || reloaded.Engine == null)
         {
-            _log?.Invoke("rule-update-verify-failed");
-            return RuleUpdateOutcome.Fail("新规则回读校验失败，已保留磁盘上的旧快照。");
+            var rolledBack = RuleSnapshotStore.TryRestorePrevious(
+                _snapshotDirectory, hadPreviousSnapshot);
+            _log?.Invoke("rule-update-verify-failed:rolledBack=" + rolledBack);
+            return RuleUpdateOutcome.Fail(rolledBack
+                ? "新规则回读校验失败，已回滚到更新前快照。"
+                : "新规则回读校验失败，回滚未完成；请检查本地规则目录。");
+        }
+
+        // 热替换的引擎必须重新叠加用户本地规则，否则一次成功更新会把 adblock/*.txt
+        // 中已生效的规则从当前会话里静默移除。用户规则已在下载前读取，不会在此处再触 IO。
+        if (userRules.Count > 0)
+        {
+            var userAdded = reloaded.Engine.AddRules(userRules);
+            _log?.Invoke($"rule-update-user-rules:{userAdded}");
         }
 
         _provider.Replace(

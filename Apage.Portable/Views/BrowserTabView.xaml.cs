@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -32,6 +33,11 @@ public partial class BrowserTabView : UserControl
     private bool _findAvailable;
     private bool _findActive;
     private string? _pendingUrl;
+
+    // 顶层导航 URI 的有界记录：Sec-Fetch-Dest 缺失时作为主文档判定的安全回退。
+    private const int TopLevelNavigationMemory = 32;
+    private readonly HashSet<string> _topLevelNavigationUris = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<string> _topLevelNavigationOrder = new();
 
     public BrowserTabView()
     {
@@ -308,6 +314,10 @@ public partial class BrowserTabView : UserControl
         core.SourceChanged += (s, e) => UrlChanged?.Invoke(this, core.Source);
         core.FaviconChanged += OnFaviconChanged;
 
+        // 仅主框架触发 CoreWebView2.NavigationStarting（iframe 走 FrameNavigationStarting）；
+        // 记录 URI 供请求管线区分主文档与第三方 iframe 文档。
+        core.NavigationStarting += (s, e) => RememberTopLevelNavigation(e.Uri);
+
         // 历史记录（B2）：只记成功的顶层导航；隐私标签与本地页面在 RecordHistory 内排除。
         // 顶层导航失败（证书错误、连接中断）不写历史，避免把失败页当成访问记录。
         core.NavigationCompleted += (s, e) =>
@@ -435,8 +445,11 @@ public partial class BrowserTabView : UserControl
     // - 必须用带 RequestSourceKinds 的三参过滤器重载（两参重载已被官方弃用：
     //   跨源 iframe 的子资源不会触发 WebResourceRequested，广告 iframe 恰是重灾区）
     // - 处理器同步判定即返回（引擎实测均值 24µs/URL，无需 GetDeferral）
-    // - 注册条件：广告引擎有规则 **或** 任一隐私开关开（头注入需要管道承载；无任何需求则不挂，
-    //   该管道会让页面加载暂停等待 UI 线程处理，官方文档明确的性能开销）
+    // - 注册条件：广告引擎有规则 **或** 任一隐私头开关开（无任何需求则不挂）
+    //
+    // 重要边界：2026-11-02 真机探针确认，在 WebResourceRequested 删除 Cookie 头后，
+    // WebView2 网络栈仍会给服务器发送同一 Cookie（docs/spikes/results/cookie-privacy.md）。
+    // 因此这里不再实现“第三方 Cookie 剥离”，也不得再把它计入追踪统计或对外宣传。
     private void HookWebPipeline(CoreWebView2 core)
     {
         var settings = Context?.Settings ?? new AppSettings();
@@ -446,7 +459,7 @@ public partial class BrowserTabView : UserControl
         var adBlockConfigured = provider != null ||
             (Context?.AdBlock != null && Context.AdBlock.BlockCount > 0);
 
-        if (!adBlockConfigured && !settings.SendDoNotTrack && !settings.SendGPC && !settings.BlockThirdPartyCookies)
+        if (!adBlockConfigured && !settings.SendDoNotTrack && !settings.SendGPC)
             return;
 
         core.AddWebResourceRequestedFilter(
@@ -455,11 +468,9 @@ public partial class BrowserTabView : UserControl
         {
             var uri = e.Request.Uri;
 
-            // 本地资产（新标签页 file://）不走拦截/剥离管道：自家内容不存在广告/追踪，且避免误伤
+            // 本地资产（新标签页 file://）不走拦截/头注入管道：自家内容不存在广告，且避免误伤
             if (uri != null && uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
                 return;
-
-            var isDocument = e.ResourceContext == CoreWebView2WebResourceContext.Document;
 
             // 1) 追踪保护头（声明性；全部请求生效，含主文档）
             if (settings.SendDoNotTrack)
@@ -467,37 +478,49 @@ public partial class BrowserTabView : UserControl
             if (settings.SendGPC)
                 e.Request.Headers.SetHeader("Sec-GPC", "1");
 
-            // 2) 广告拦截：非主文档命中规则即 403（主文档不拦：引擎不求值 $ 修饰符，
-            //    泛匹配规则误杀主导航的代价过高）；命中计入隐私统计「广告」。
-            //    每请求重新读取 provider，手动更新规则后无需重建标签即可生效。
+            // 2) 广告拦截：命中规则即 403。
+            //    只豁免真正的顶层主文档——泛匹配规则误杀主导航的代价过高；
+            //    第三方 iframe 的 Document 必须继续参与匹配，否则广告 iframe 会整块绕过。
             var engine = provider?.Current ?? Context?.AdBlock;
-            if (!isDocument && engine != null && engine.IsBlocked(uri))
+            if (engine != null && !IsTopLevelDocumentRequest(e) && engine.IsBlocked(uri))
             {
                 // 空内容 + 403 即取消该请求（args.Response 一经赋值请求不再放行）
                 e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
                 Context?.Stats?.RecordAdBlocked();
-                return;
-            }
-
-            // 3) 第三方 Cookie 剥离（仅子资源：顶层导航对目标站即第一方，剥了会破坏登录态）；
-            //    第三方判定由注入的 ThirdPartyDetector 基于随包 PSL 完成；未注入时回退末两标签。
-            //    只有请求确实携带 Cookie 并被移除时才计入追踪统计，避免把无 Cookie 的
-            //    第三方子资源也虚增为“已拦截追踪”。
-            var thirdParty = Context?.ThirdParty ?? ThirdPartyDetector.Fallback;
-            if (!isDocument && settings.BlockThirdPartyCookies
-                && thirdParty.IsThirdParty(core.Source, uri))
-            {
-                string? cookieHeader = null;
-                try { cookieHeader = e.Request.Headers.GetHeader("Cookie"); }
-                catch { /* 无该头或内核拒绝读取时视为没有可剥离内容 */ }
-
-                if (!string.IsNullOrEmpty(cookieHeader))
-                {
-                    e.Request.Headers.RemoveHeader("Cookie");
-                    Context?.Stats?.RecordTrackerBlocked();
-                }
             }
         };
+    }
+
+    // 判定请求是否为顶层主文档。优先使用 Chromium 的 Sec-Fetch-Dest（iframe 文档为 iframe，
+    // 顶层为 document）；头缺失时回退到 NavigationStarting 记录的有界 URI 集合。无法确认时
+    // 一律按“非顶层”处理：宁可让规则继续判断，也不把广告 iframe 当主文档放行。
+    private bool IsTopLevelDocumentRequest(CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        if (e.ResourceContext != CoreWebView2WebResourceContext.Document)
+            return false;
+
+        try
+        {
+            var destination = e.Request.Headers.GetHeader("Sec-Fetch-Dest");
+            if (!string.IsNullOrEmpty(destination))
+                return string.Equals(destination, "document", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            // 读取失败时走 NavigationStarting 回退，不阻断请求
+        }
+
+        return !string.IsNullOrEmpty(e.Request.Uri) && _topLevelNavigationUris.Contains(e.Request.Uri);
+    }
+
+    private void RememberTopLevelNavigation(string? uri)
+    {
+        if (string.IsNullOrEmpty(uri) || !_topLevelNavigationUris.Add(uri!))
+            return;
+
+        _topLevelNavigationOrder.Enqueue(uri!);
+        while (_topLevelNavigationOrder.Count > TopLevelNavigationMemory)
+            _topLevelNavigationUris.Remove(_topLevelNavigationOrder.Dequeue());
     }
 
     /// <summary>新标签页动作上浮（openSettings / addShortcut：设置面板与快捷方式管理属 Phase 6/4 后续，宿主先以提示承接）。</summary>
@@ -506,12 +529,14 @@ public partial class BrowserTabView : UserControl
     private const string NtpChannel = "ntp";
 
     // 新标签页 WebMessage 桥（设计 §4.2）：仅处理 channel='ntp' 的消息。
-    // 安全门控：任意网页均可 chrome.webview.postMessage，故仅当 core.Source 为新标签页 URI 时
-    // 才受理（官方文档同样要求校验 Source 后再使用宿主能力）——否则等于把导航/设置入口暴露给所有站点。
+    // 安全门控：任意网页均可 chrome.webview.postMessage，必须同时满足
+    //   1) 发送消息的 document（e.Source）就是 NTP index.html；
+    //   2) 当前顶层页面（core.Source）也是 NTP，排除“远程页面内嵌 NTP iframe”借用宿主能力。
+    // 仅校验 core.Source 会把发信 frame 错当成顶层文档，e.Source 才是官方定义的发送方 URI。
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         var core = WebView.CoreWebView2;
-        if (core == null || !IsNewTabSource(core.Source))
+        if (core == null || !IsNewTabSource(e.Source) || !IsNewTabSource(core.Source))
             return;
 
         try
@@ -546,17 +571,19 @@ public partial class BrowserTabView : UserControl
         }
     }
 
-    // 新标签页来源判定：core.Source 落在 webui 目录内即受理（目录前缀比对，
-    // 兼容 URI 规范化差异；大小写不敏感——Windows 路径不区分大小写）
+    // 新标签页来源判定：只接受运行时抽取的 index.html 本身，不再做目录前缀比对。
+    // 目录内其他本地文件、相似前缀或远程页面的子 frame 都不具备调用宿主能力的资格。
     private static bool IsNewTabSource(string? source) =>
-        !string.IsNullOrEmpty(source) && source!.StartsWith(WebUiAssets.FolderUri, StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrEmpty(source) &&
+        string.Equals(source, WebUiAssets.IndexUri, StringComparison.OrdinalIgnoreCase);
 
-    // 隐私统计回复：与 app.js 的桥约定对齐（{channel:'ntp', type:'stats', trackers, ads}）
+    // 隐私统计回复：与 app.js 的桥约定对齐（{channel:'ntp', type:'stats', ads}）。
+    // trackers 已移除：WebView2 当前没有可验证的第三方 Cookie 阻断能力，不能继续展示无效承诺。
     private void ReplyStats(CoreWebView2 core)
     {
-        var (ads, trackers) = Context?.Stats?.Snapshot ?? (0, 0);
+        var ads = Context?.Stats?.Snapshot.Ads ?? 0;
         core.PostWebMessageAsJson(JsonSerializer.Serialize(
-            new { channel = NtpChannel, type = "stats", trackers, ads }));
+            new { channel = NtpChannel, type = "stats", ads }));
     }
 
     // WebView2 favicon 变更：取回 PNG 流解码为 ImageSource（无图标则 null），广播给宿主回填标签。

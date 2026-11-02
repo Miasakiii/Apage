@@ -175,13 +175,32 @@ foreach ($pkg in @($coreCsproj.GetElementsByTagName('PackageReference'))) {
 # ---------------------------------------------------------------------------
 # AGENTS.md red line #3: data/ cache/ wallpapers/ are runtime-only (portable
 # layout) and must never be committed.
-$portableDirPattern = '(^|/)(data|cache|wallpapers)/'
+# 只匹配仓库根目录下的运行时目录。必须使用大小写敏感匹配：
+# Apage.Core/Data 是源码，不能被当成便携运行时的 data/。
+$portableDirPattern = '^(data|cache|wallpapers)/'
+
+# 内建回归用例：同时锁住“根目录运行时目录要命中”和“源码目录不能被误伤”。
+# 这些路径不依赖当前工作区状态，避免脚本逻辑再次被无关提交悄悄改坏。
+$portablePathCases = @(
+    [pscustomobject]@{ Path = 'data/apage.db'; Expected = $true; Name = 'root data' }
+    [pscustomobject]@{ Path = 'cache/WebView2/EBWebView'; Expected = $true; Name = 'root cache' }
+    [pscustomobject]@{ Path = 'wallpapers/bg.jpg'; Expected = $true; Name = 'root wallpapers' }
+    [pscustomobject]@{ Path = 'Apage.Core/Data/BookmarkRepository.cs'; Expected = $false; Name = 'Core Data source' }
+    [pscustomobject]@{ Path = 'docs/data/example.md'; Expected = $false; Name = 'nested data' }
+    [pscustomobject]@{ Path = 'Data/runtime.db'; Expected = $false; Name = 'case-sensitive root' }
+)
+foreach ($case in $portablePathCases) {
+    $matched = [bool]($case.Path -cmatch $portableDirPattern)
+    if ($matched -ne $case.Expected) {
+        $failures.Add("portable-dir-selftest : '$($case.Path)' ($($case.Name)) expected match=$($case.Expected), got $matched")
+    }
+}
 
 $gitignoreRel = '.gitignore'
 $gitignoreLines = (Get-Content -LiteralPath (Join-Path $root $gitignoreRel)) | ForEach-Object { $_.Trim() }
-foreach ($dir in 'data/', 'cache/', 'wallpapers/') {
+foreach ($dir in '/data/', '/cache/', '/wallpapers/') {
     if ($gitignoreLines -notcontains $dir) {
-        $failures.Add("$gitignoreRel : missing ignore entry '$dir' - portable runtime directories must stay ignored")
+        $failures.Add("$gitignoreRel : missing rooted ignore entry '$dir' - portable runtime directories must stay ignored; an unanchored entry would also hide Apage.Core/Data")
     }
 }
 
@@ -198,7 +217,9 @@ catch { $insideGit = $false }
 finally { $ErrorActionPreference = $prevEap }
 
 if ($insideGit) {
-    $trackedHits = @(git -C $root ls-files) | Where-Object { $_ -match $portableDirPattern }
+    # git ls-files 输出仓库相对路径且始终使用正斜杠；-cmatch 保持大小写敏感，
+    # 只接受 data/、cache/、wallpapers/ 三个根目录，不匹配 Apage.Core/Data/**。
+    $trackedHits = @(git -C $root ls-files) | Where-Object { $_ -cmatch $portableDirPattern }
     foreach ($tracked in $trackedHits) {
         $failures.Add("portable-runtime-dir : '$tracked' is tracked by git - data/ cache/ wallpapers/ contents must never be committed (git rm --cached '$tracked')")
     }
@@ -218,12 +239,13 @@ $testFiles = Get-ChildItem -Path (Join-Path $root 'Apage.Core.Tests') -Recurse -
     Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }
 $testText = ($testFiles | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
 
-foreach ($prop in 'BlockThirdPartyCookies', 'SendDoNotTrack', 'SendGPC', 'WebRTCIPProtection') {
+foreach ($prop in 'SendDoNotTrack', 'SendGPC', 'WebRTCIPProtection') {
     if ($testText -notmatch "Assert\.True\(\s*\w+\.$prop\b") {
         $failures.Add("$privacyTestsRel : missing 'Assert.True(...$prop)' - privacy default-ON baseline must stay locked by a unit test assertion")
     }
 }
-foreach ($prop in 'OnlineSearchSuggestions', 'ClearOnExit') {
+# WebView2 无可靠第三方 Cookie 阻断入口；旧字段必须保持关闭，防止重新形成假防护。
+foreach ($prop in 'OnlineSearchSuggestions', 'ClearOnExit', 'BlockThirdPartyCookies') {
     if ($testText -notmatch "Assert\.False\(\s*\w+\.$prop\b") {
         $failures.Add("$privacyTestsRel : missing 'Assert.False(...$prop)' - privacy default-OFF baseline must stay locked by a unit test assertion")
     }

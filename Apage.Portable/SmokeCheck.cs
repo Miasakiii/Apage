@@ -88,6 +88,8 @@ namespace Apage.Portable
             var dataChecked = false;
             var findProbeStarted = false;
             var findProbeDone = false;
+            var ntpProbeStarted = false;
+            var ntpProbeDone = false;
             var timer = new DispatcherTimer { Interval = PollInterval };
             timer.Tick += async (s, e) =>
             {
@@ -213,9 +215,38 @@ namespace Apage.Portable
                     findProbeDone = true;
                 }
 
+                // NTP WebMessage 桥（可门禁）：从真实新标签页发送 getStats，
+                // 验证 e.Source/core.Source 精确来源校验不会误杀正常宿主通信。
+                if (findProbeDone && !ntpProbeStarted)
+                {
+                    ntpProbeStarted = true;
+                    bool bridgeOk;
+                    try
+                    {
+                        bridgeOk = await window.ValidateNtpBridgeAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        bridgeOk = false;
+                        window.LogSmokeFailure(ex);
+                    }
+
+                    window.LogSmokeNote("ntp-bridge", bridgeOk ? "pass" : "fail");
+                    if (!bridgeOk)
+                    {
+                        timer.Stop();
+                        Trace.WriteLine("[Smoke] NTP WebMessage 桥校验失败");
+                        StartupMetrics.Complete("ntp-bridge-failed", 1);
+                        app.Shutdown(1);
+                        return;
+                    }
+
+                    ntpProbeDone = true;
+                }
+
                 // 信号③：当前标签 CoreWebView2 非空 = Environment 创建 + 内核进程初始化成功
                 // 信号④：SQLite 初始化完成（验证单文件中的托管/原生依赖链真实可用）
-                if (rendered && windowsValidated && dataChecked && findProbeDone &&
+                if (rendered && windowsValidated && dataChecked && findProbeDone && ntpProbeDone &&
                     window.Tabs?.Current?.View?.Core != null &&
                     window.DatabaseReady && window.PrivacyAssetsReady)
                 {

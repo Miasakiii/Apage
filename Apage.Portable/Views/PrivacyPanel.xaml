@@ -19,12 +19,6 @@
                 <TextBlock Text=" 广告" VerticalAlignment="Bottom" Margin="2,0,0,3"
                            FontSize="{DynamicResource Apage.FontSize.Sm}"
                            Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
-                <TextBlock x:Name="TrackersText" Margin="16,0,0,0" FontSize="18"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource Apage.Brush.Shield}"/>
-                <TextBlock Text=" 追踪" VerticalAlignment="Bottom" Margin="2,0,0,3"
-                           FontSize="{DynamicResource Apage.FontSize.Sm}"
-                           Foreground="{DynamicResource Apage.Brush.TextSecondary}"/>
             </StackPanel>
             <TextBlock x:Name="RulesText" Margin="0,10,0,0" TextWrapping="Wrap"
                        FontSize="{DynamicResource Apage.FontSize.Xs}"

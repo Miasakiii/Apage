@@ -103,13 +103,53 @@ public sealed class DownloadRepositoryTests : IDisposable
 
         // 模拟上次进程被强杀后重启：同一数据库上的新实例
         var reopened = new DownloadRepository(new SqliteDatabase(Path.Combine(_dir, "apage.db")));
-        var marked = await reopened.MarkOrphanedAsync();
+        var marked = await reopened.MarkOrphanedAsync(DateTimeOffset.UtcNow.AddMinutes(1));
 
         Assert.Equal(1, marked);
         var live = await reopened.FindAsync("id-live");
         Assert.Equal(DownloadStates.Failed, live!.State);
         Assert.Equal("应用退出时下载未完成", live.Error);
         Assert.Equal(DownloadStates.Completed, (await reopened.FindAsync("id-done"))!.State);
+    }
+
+    [Fact]
+    public async Task MarkOrphanedById_OnlyTouchesRequestedRow()
+    {
+        await _downloads.StartAsync("id-a", "https://example.com/a", "C:\\a", 10);
+        await _downloads.StartAsync("id-b", "https://example.com/b", "C:\\b", 10);
+
+        var marked = await _downloads.MarkOrphanedAsync("id-a");
+
+        Assert.True(marked);
+        Assert.Equal(DownloadStates.Failed, (await _downloads.FindAsync("id-a"))!.State);
+        Assert.Equal(DownloadStates.InProgress, (await _downloads.FindAsync("id-b"))!.State);
+    }
+
+    [Fact]
+    public async Task MarkOrphanedByCutoff_DoesNotTouchDownloadsStartedAfterProcessStart()
+    {
+        var processStartedAt = DateTimeOffset.UtcNow;
+        await _downloads.StartAsync("id-new", "https://example.com/new", "C:\\new", 10);
+
+        var marked = await _downloads.MarkOrphanedAsync(processStartedAt);
+
+        Assert.Equal(0, marked);
+        Assert.Equal(DownloadStates.InProgress, (await _downloads.FindAsync("id-new"))!.State);
+    }
+
+    [Fact]
+    public async Task TerminalState_CannotBeOverwrittenByLateEvents()
+    {
+        await _downloads.StartAsync("id-final", "https://example.com/f", "C:\\f", 100);
+        await _downloads.MarkCompletedAsync("id-final");
+
+        await _downloads.MarkCanceledAsync("id-final");
+        await _downloads.UpdateProgressAsync("id-final", 1, 100);
+
+        var entry = await _downloads.FindAsync("id-final");
+        Assert.Equal(DownloadStates.Completed, entry!.State);
+        Assert.Equal(100, entry.ReceivedBytes);
+        Assert.NotNull(entry.FinishedAt);
     }
 
     [Fact]

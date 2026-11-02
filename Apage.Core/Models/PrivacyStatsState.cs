@@ -16,7 +16,7 @@ public sealed record PrivacyStatsState
     /// <summary>广告规则拦截次数（本周累计）。</summary>
     public long AdsBlocked { get; init; }
 
-    /// <summary>第三方 Cookie 剥离次数（本周累计，即新标签页「已拦截追踪」数字）。</summary>
+    /// <summary>旧版追踪计数；事件级 Cookie 删除已被证伪，字段仅兼容旧 JSON，不再增长或展示。</summary>
     public long TrackersBlocked { get; init; }
 
     /// <summary>

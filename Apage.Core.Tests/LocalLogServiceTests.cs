@@ -106,6 +106,19 @@ public sealed class LocalLogServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Export_ToSourceLogPath_IsRejectedWithoutTruncatingSource()
+    {
+        var log = new LocalLogService(_dir);
+        Assert.True(log.Write(LocalLogLevel.Info, "source", "keep-me"));
+        var before = await File.ReadAllBytesAsync(log.CurrentLogPath);
+
+        var exported = await log.TryExportAsync(log.CurrentLogPath);
+
+        Assert.False(exported);
+        Assert.Equal(before, await File.ReadAllBytesAsync(log.CurrentLogPath));
+    }
+
+    [Fact]
     public void Write_IoFailure_ReturnsFalse_DoesNotThrow()
     {
         // 用一个普通文件占用“日志目录”路径，迫使目录创建失败。

@@ -163,10 +163,12 @@ ON CONFLICT(id) DO UPDATE SET
     }
 
     /// <summary>
-    /// 把上次运行遗留的 in_progress 行标为失败（异常退出：进程被杀、断电、崩溃）。
-    /// 返回处理行数。正常退出应先由宿主把活动下载取消或完成，不应依赖本方法。
+    /// 把上次运行遗留的 in_progress 行标为失败。只处理 <paramref name="startedBefore"/>
+    /// 之前创建的行，避免启动维护延迟执行时误伤本次进程新开始的下载。
     /// </summary>
-    public async Task<int> MarkOrphanedAsync(CancellationToken cancellationToken = default)
+    public async Task<int> MarkOrphanedAsync(
+        DateTimeOffset startedBefore,
+        CancellationToken cancellationToken = default)
     {
         await _database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         return await Task.Run(() =>
@@ -179,12 +181,48 @@ ON CONFLICT(id) DO UPDATE SET
                 command.CommandText = @"
 UPDATE downloads
 SET state = $failed, finished_at = $finished, error = $error
-WHERE state = $inProgress;";
+WHERE state = $inProgress AND started_at < $cutoff;";
                 command.Parameters.AddWithValue("$failed", DownloadStates.Failed);
                 command.Parameters.AddWithValue("$finished", BookmarkRepository.Format(DateTimeOffset.UtcNow));
                 command.Parameters.AddWithValue("$error", "应用退出时下载未完成");
                 command.Parameters.AddWithValue("$inProgress", DownloadStates.InProgress);
+                command.Parameters.AddWithValue("$cutoff", BookmarkRepository.Format(startedBefore));
                 return command.ExecuteNonQuery();
+            }
+            finally
+            {
+                _database.WriteGate.Release();
+            }
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 只把指定 id 的残留 in_progress 行标为失败。下载列表中的单条取消必须用此重载，
+    /// 不得调用全表清理，否则会把其他健康的活动下载一起误标。
+    /// </summary>
+    public async Task<bool> MarkOrphanedAsync(string id, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return false;
+
+        await _database.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        return await Task.Run(() =>
+        {
+            _database.WriteGate.Wait(cancellationToken);
+            try
+            {
+                using var connection = _database.OpenConnection();
+                using var command = connection.CreateCommand();
+                command.CommandText = @"
+UPDATE downloads
+SET state = $failed, finished_at = $finished, error = $error
+WHERE id = $id AND state = $inProgress;";
+                command.Parameters.AddWithValue("$failed", DownloadStates.Failed);
+                command.Parameters.AddWithValue("$finished", BookmarkRepository.Format(DateTimeOffset.UtcNow));
+                command.Parameters.AddWithValue("$error", "该下载已不在当前会话中");
+                command.Parameters.AddWithValue("$inProgress", DownloadStates.InProgress);
+                command.Parameters.AddWithValue("$id", id);
+                return command.ExecuteNonQuery() > 0;
             }
             finally
             {
@@ -232,8 +270,12 @@ WHERE state = $inProgress;";
             {
                 using var connection = _database.OpenConnection();
                 using var command = connection.CreateCommand();
-                command.CommandText = $"UPDATE downloads SET {setClause} WHERE id = $id;";
+                // 进度与终态都只允许从 in_progress 迁移：迟到/重复事件不得改写终态，
+                // 也不得在 Start 尚未落库时先创建一条“无主”记录。
+                command.CommandText =
+                    $"UPDATE downloads SET {setClause} WHERE id = $id AND state = $inProgress;";
                 command.Parameters.AddWithValue("$id", id);
+                command.Parameters.AddWithValue("$inProgress", DownloadStates.InProgress);
                 bind(command);
                 command.ExecuteNonQuery();
             }

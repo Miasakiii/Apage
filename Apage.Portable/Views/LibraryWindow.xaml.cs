@@ -313,8 +313,9 @@ namespace Apage.Portable.Views
 
             if (!_coordinator.Cancel(row.Id))
             {
-                // 进程重启后，旧记录虽标记为进行中，但已没有对应的内核对象
-                await _downloads.MarkOrphanedAsync();
+                // 进程重启后，旧记录虽标记为进行中，但已没有对应的内核对象。
+                // 只处理这一条，绝不能全表清理——其他下载可能正在正常进行。
+                await _downloads.MarkOrphanedAsync(row.Id);
                 StatusText.Text = "该下载已不在当前会话中，已标记为失败。";
             }
 

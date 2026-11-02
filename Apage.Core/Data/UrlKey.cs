@@ -39,6 +39,10 @@ public static class UrlKey
                 Scheme = uri.Scheme.ToLowerInvariant(),
                 Host = NormalizeHost(uri),
                 Fragment = string.Empty,
+                // 浏览器地址中的 userinfo 可能包含账号/密码：绝不写入历史、书签、
+                // 下载记录或地址栏建议。需要认证的站点应由页面自身完成登录流程。
+                UserName = string.Empty,
+                Password = string.Empty,
             };
 
             if ((builder.Scheme == "http" && builder.Port == 80) ||

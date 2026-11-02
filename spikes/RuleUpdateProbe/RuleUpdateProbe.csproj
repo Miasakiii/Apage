@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    独立集成探针：真实网络执行一次与设置页相同的规则更新链路
+    （RuleUpdateClient HTTPS 下载 → 共用筛选 → 原子快照 → 回读 → 热替换 → 用户规则保留）。
+    不加入 Apage.sln；构建：dotnet build spikes/RuleUpdateProbe/RuleUpdateProbe.csproj
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Apage.Spikes.RuleUpdateProbe</RootNamespace>
+    <AssemblyName>RuleUpdateProbe</AssemblyName>
+    <NoWarn>$(NoWarn);SYSLIB0014</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Apage.Core\Apage.Core.csproj" />
+    <Compile Include="..\..\Apage.Portable\Services\RuleUpdateClient.cs" Link="RuleUpdateClient.cs" />
+  </ItemGroup>
+
+</Project>

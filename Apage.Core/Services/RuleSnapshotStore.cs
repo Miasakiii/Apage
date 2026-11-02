@@ -170,6 +170,49 @@ public static class RuleSnapshotStore
         return manifest;
     }
 
+    /// <summary>当前目录是否已有一对正式快照文件。</summary>
+    public static bool HasSnapshot(string directory) =>
+        !string.IsNullOrWhiteSpace(directory) &&
+        File.Exists(Path.Combine(directory, RulesFileName)) &&
+        File.Exists(Path.Combine(directory, ManifestFileName));
+
+    /// <summary>
+    /// 把最近一次成功 Save 产生的一对 .bak 恢复到正式文件。
+    /// 若更新前没有快照（<paramref name="hadPrevious"/> = false），删除本次新建的一对文件。
+    /// 用于 Save 已提交但后续回读失败时恢复提交前状态；返回 false 表示无法完成回滚。
+    /// </summary>
+    public static bool TryRestorePrevious(string directory, bool hadPrevious)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+            return false;
+
+        var rulesPath = Path.Combine(directory, RulesFileName);
+        var manifestPath = Path.Combine(directory, ManifestFileName);
+        try
+        {
+            if (!hadPrevious)
+            {
+                TryDelete(rulesPath);
+                TryDelete(manifestPath);
+                return !File.Exists(rulesPath) && !File.Exists(manifestPath);
+            }
+
+            var rulesBackup = rulesPath + ".bak";
+            var manifestBackup = manifestPath + ".bak";
+            if (!File.Exists(rulesBackup) || !File.Exists(manifestBackup))
+                return false;
+
+            File.Copy(rulesBackup, rulesPath, overwrite: true);
+            File.Copy(manifestBackup, manifestPath, overwrite: true);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                   ex is NotSupportedException)
+        {
+            return false;
+        }
+    }
+
     private static bool ReplaceOrMove(string tempPath, string targetPath, string backupPath)
     {
         if (File.Exists(targetPath))

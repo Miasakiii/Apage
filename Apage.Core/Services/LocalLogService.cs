@@ -109,37 +109,81 @@ public sealed class LocalLogService
 
         return Task.Run(() =>
         {
+            string content;
+            string fullDestination;
             try
             {
-                List<string> files;
-                lock (_gate)
+                fullDestination = Path.GetFullPath(destinationPath);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException ||
+                                       ex is PathTooLongException)
+            {
+                return false;
+            }
+
+            lock (_gate)
+            {
+                try
                 {
                     if (!System.IO.Directory.Exists(_directory))
                         return false;
-                    files = System.IO.Directory.GetFiles(_directory, "apage*.log")
+
+                    var files = System.IO.Directory.GetFiles(_directory, "apage*.log")
                         .OrderByDescending(GetLogOrder)
                         .ToList();
                     if (files.Count == 0)
                         return false;
 
-                    var targetDirectory = Path.GetDirectoryName(Path.GetFullPath(destinationPath));
-                    if (!string.IsNullOrEmpty(targetDirectory))
-                        System.IO.Directory.CreateDirectory(targetDirectory);
+                    // 目标若就是任一源日志，截断导出会反过来吃掉诊断数据；直接拒绝。
+                    if (files.Any(file => string.Equals(
+                            Path.GetFullPath(file), fullDestination, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return false;
+                    }
 
-                    using var output = new StreamWriter(destinationPath, false, new UTF8Encoding(false));
+                    var builder = new StringBuilder();
                     foreach (var file in files)
                     {
-                        output.WriteLine("===== " + Path.GetFileName(file) + " =====");
-                        output.Write(File.ReadAllText(file));
-                        output.WriteLine();
+                        builder.AppendLine("===== " + Path.GetFileName(file) + " =====");
+                        builder.AppendLine(File.ReadAllText(file));
                     }
+                    content = builder.ToString();
                 }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                           ex is ArgumentException || ex is NotSupportedException)
+                {
+                    return false;
+                }
+            }
+
+            string? tempPath = null;
+            try
+            {
+                var targetDirectory = Path.GetDirectoryName(fullDestination);
+                if (!string.IsNullOrEmpty(targetDirectory))
+                    System.IO.Directory.CreateDirectory(targetDirectory);
+
+                tempPath = fullDestination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                File.WriteAllText(tempPath, content, new UTF8Encoding(false));
+
+                if (File.Exists(fullDestination))
+                    File.Replace(tempPath, fullDestination, null, ignoreMetadataErrors: true);
+                else
+                    File.Move(tempPath, fullDestination);
+
                 return true;
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
-                                       ex is ArgumentException || ex is NotSupportedException)
+                                       ex is ArgumentException || ex is NotSupportedException ||
+                                       ex is PlatformNotSupportedException)
             {
+                // 目标已存在且当前文件系统不支持 Replace 时返回 false，绝不删除原目标。
                 return false;
+            }
+            finally
+            {
+                try { if (tempPath != null && File.Exists(tempPath)) File.Delete(tempPath); }
+                catch { /* 清理临时文件失败不影响结论 */ }
             }
         });
     }

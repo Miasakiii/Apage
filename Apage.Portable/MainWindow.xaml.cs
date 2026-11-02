@@ -37,6 +37,9 @@ namespace Apage.Portable
         private RuleUpdateService? _ruleUpdates;
         private OmniboxSuggestionService? _suggestions;
 
+        // 启动瞬间冻结的时间线：下载维护只清理此时间之前遗留的 in_progress 行。
+        private readonly DateTimeOffset _processStartedAt = DateTimeOffset.UtcNow;
+
         private readonly DispatcherTimer _toastTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromSeconds(1.8),
@@ -51,6 +54,10 @@ namespace Apage.Portable
         };
 
         private BrowserTabView? _findTab;
+
+        // 只有成功读取并应用上次会话后才允许覆盖 session.json。
+        // 启动加载期间关闭窗口、或恢复异常时保持旧文件不变，避免空/半份快照覆盖完整会话。
+        private bool _sessionRestoreCompleted;
 
         /// <summary>多标签管理器（供 SmokeCheck 轮询当前标签内核就绪信号；无参构造时为 null）。</summary>
         internal TabManager? Tabs => _tabs;
@@ -171,6 +178,56 @@ namespace Apage.Portable
             return bookmarkOk && historyOk;
         }
 
+        /// <summary>
+        /// 冒烟专用：真实走一次 NTP WebMessage 桥（getStats），验证 e.Source/core.Source
+        /// 的精确来源门控没有把正常新标签页误拦截。返回 false 表示桥不可用或来源校验失败。
+        /// </summary>
+        internal async Task<bool> ValidateNtpBridgeAsync()
+        {
+            if (_tabs == null)
+                return false;
+
+            var tab = _tabs.NewTab(WebUiAssets.IndexUri);
+            var deadline = DateTime.UtcNow.AddSeconds(8);
+            var core = tab.View?.Core;
+            while (core == null && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(100);
+                core = tab.View?.Core;
+            }
+
+            if (core == null)
+                return false;
+
+            while (DateTime.UtcNow < deadline &&
+                   !string.Equals(core.Source, WebUiAssets.IndexUri, StringComparison.OrdinalIgnoreCase))
+            {
+                await Task.Delay(100);
+            }
+
+            if (!string.Equals(core.Source, WebUiAssets.IndexUri, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            const string startProbe = @"(function () {
+  window.__apageNtpProbe = 'pending';
+  var w = window.chrome && window.chrome.webview;
+  if (!w) { return false; }
+  w.addEventListener('message', function (e) {
+    if (e && e.data && e.data.type === 'stats') { window.__apageNtpProbe = 'ok'; }
+  });
+  w.postMessage({ channel: 'ntp', type: 'getStats' });
+  return true;
+})()";
+
+            var started = await core.ExecuteScriptAsync(startProbe).ConfigureAwait(true);
+            if (!string.Equals(started, "true", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            await Task.Delay(500);
+            var observed = await core.ExecuteScriptAsync("window.__apageNtpProbe").ConfigureAwait(true);
+            return observed?.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         public MainWindow()
         {
             InitializeComponent();
@@ -248,6 +305,7 @@ namespace Apage.Portable
                 var restored = _tabs?.RestoreSession(await session) ?? 0;
                 if (restored == 0)
                     _tabs?.NewTab();
+                _sessionRestoreCompleted = true;
             }
             catch (Exception ex)
             {
@@ -335,16 +393,16 @@ namespace Apage.Portable
             }
 
             // 用户规则始终独立加载；即使内置快照损坏，用户规则仍可生效。
+            // 与 RuleUpdateService 共用 UserRuleStore，保证热更新前后口径一致。
+            var userRuleDirectory = Path.Combine(AppPaths.DataDirectory, "adblock");
             try
             {
-                var dir = Path.Combine(AppPaths.DataDirectory, "adblock");
-                if (Directory.Exists(dir))
+                var userRules = UserRuleStore.LoadAll(userRuleDirectory);
+                if (userRules.Count > 0)
                 {
                     engine ??= new AdBlockRuleEngine();
-                    foreach (var file in Directory.GetFiles(dir, "*.txt"))
-                        engine.AddRules(File.ReadLines(file));
+                    engine.AddRules(userRules);
                 }
-
             }
             catch (Exception ex)
             {
@@ -362,7 +420,8 @@ namespace Apage.Portable
                 _services.PrivacyDirectory,
                 _adBlockProvider,
                 updateClient.DownloadAsync,
-                message => _services?.LocalLog.Write(LocalLogLevel.Info, "rule-update", message));
+                message => _services?.LocalLog.Write(LocalLogLevel.Info, "rule-update", message),
+                userRuleDirectory: userRuleDirectory);
 
             if (engine != null)
             {
@@ -417,7 +476,7 @@ namespace Apage.Portable
 
             try
             {
-                var orphaned = await _services.Downloads.MarkOrphanedAsync();
+                var orphaned = await _services.Downloads.MarkOrphanedAsync(_processStartedAt);
                 var pruned = await _services.History.PruneAsync(DateTimeOffset.UtcNow.AddDays(-90));
                 _services.LocalLog.Write(
                     LocalLogLevel.Info,
@@ -452,8 +511,16 @@ namespace Apage.Portable
         {
             if (_services == null || _tabs == null)
                 return;
-            try { _services.Session.SaveAsync(_tabs.CaptureSession()).GetAwaiter().GetResult(); }
-            catch (Exception ex) { _services.LocalLog.WriteException("session-save", ex); }
+            if (_sessionRestoreCompleted)
+            {
+                try { _services.Session.SaveAsync(_tabs.CaptureSession()).GetAwaiter().GetResult(); }
+                catch (Exception ex) { _services.LocalLog.WriteException("session-save", ex); }
+            }
+            else
+            {
+                _services.LocalLog.Write(
+                    LocalLogLevel.Info, "session-save", "skipped-before-restore-completed");
+            }
             try { _services.PrivacyStats.SaveAsync().GetAwaiter().GetResult(); }
             catch (Exception ex) { _services.LocalLog.WriteException("privacy-save", ex); }
             _tabs.Dispose(); // 停止休眠定时器
@@ -734,7 +801,7 @@ namespace Apage.Portable
                 ShieldPopup.Child = panel;
             }
 
-            var (ads, trackers) = _services?.PrivacyStats.Snapshot ?? (0, 0);
+            var ads = _services?.PrivacyStats.Snapshot.Ads ?? 0;
 
             var info = _adBlockProvider?.Info;
             var rules = info == null
@@ -745,11 +812,10 @@ namespace Apage.Portable
             var settings = _services?.Settings.Current;
             var switches = settings == null
                 ? string.Empty
-                : $"三方 Cookie 剥离：{(settings.BlockThirdPartyCookies ? "开" : "关")} · " +
-                  $"DNT：{(settings.SendDoNotTrack ? "开" : "关")} · " +
+                : $"DNT：{(settings.SendDoNotTrack ? "开" : "关")} · " +
                   $"GPC：{(settings.SendGPC ? "开" : "关")}";
 
-            panel.Refresh(ads, trackers, rules, switches);
+            panel.Refresh(ads, rules, switches);
         }
 
         // 用户脚本属 S5（v0.1 之后）；这里给明确说明，避免按钮点了没反应

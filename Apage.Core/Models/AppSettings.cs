@@ -15,8 +15,12 @@ public sealed record AppSettings
     /// <summary>主题：system / light / dark。</summary>
     public string Theme { get; set; } = "system";
 
-    /// <summary>拦截第三方 Cookie（默认开）。</summary>
-    public bool BlockThirdPartyCookies { get; set; } = true;
+    /// <summary>
+    /// 旧版“第三方 Cookie 剥离”开关。2026-11-02 真机探针证实 WebView2 会在
+    /// WebResourceRequested 之后重新附加 Cookie，该能力无法成立；字段保留仅为兼容旧
+    /// settings.json，默认 false，UI 与请求管线均不再消费。
+    /// </summary>
+    public bool BlockThirdPartyCookies { get; set; }
 
     /// <summary>发送 DNT: 1 请求头（默认开，声明性，多数站点忽略）。</summary>
     public bool SendDoNotTrack { get; set; } = true;

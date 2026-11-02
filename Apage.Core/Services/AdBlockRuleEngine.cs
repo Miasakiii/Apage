@@ -180,7 +180,7 @@ public sealed class AdBlockRuleEngine
     {
         if (string.IsNullOrWhiteSpace(url))
             return false;
-        string u = url!.ToLowerInvariant();
+        string u = NormalizeUrlForMatching(url!.ToLowerInvariant());
 
         foreach (string key in EnumerateKeys(u))
         {
@@ -322,6 +322,50 @@ public sealed class AdBlockRuleEngine
                 if (ok) yield return url.Substring(i, len);
             }
         }
+    }
+
+    /// <summary>
+    /// URL authority 归一（仅用于规则匹配，不用于持久化）：去掉 userinfo、去掉主机末尾的 DNS 根点。
+    /// 这两类等价写法会让 `||domain^` 规则失效，但不需要引入完整 URL 解析/重编码，
+    /// 以免改变路径与查询串的原始字节。
+    /// </summary>
+    private static string NormalizeUrlForMatching(string url)
+    {
+        var schemeSeparator = url.IndexOf("://", StringComparison.Ordinal);
+        if (schemeSeparator < 0)
+            return url;
+
+        var scheme = url.Substring(0, schemeSeparator);
+        if (!string.Equals(scheme, "http", StringComparison.Ordinal) &&
+            !string.Equals(scheme, "https", StringComparison.Ordinal))
+        {
+            return url;
+        }
+
+        var authorityStart = schemeSeparator + 3;
+        var authorityEnd = url.IndexOfAny(new[] { '/', '?', '#' }, authorityStart);
+        if (authorityEnd < 0)
+            authorityEnd = url.Length;
+
+        var authority = url.Substring(authorityStart, authorityEnd - authorityStart);
+        var at = authority.LastIndexOf('@');
+        if (at >= 0)
+            authority = authority.Substring(at + 1);
+
+        if (!authority.StartsWith("[", StringComparison.Ordinal)) // IPv6 字面量不做尾点裁剪
+        {
+            var portSeparator = authority.LastIndexOf(':');
+            var host = portSeparator >= 0 ? authority.Substring(0, portSeparator) : authority;
+            var port = portSeparator >= 0 ? authority.Substring(portSeparator) : string.Empty;
+            if (host.EndsWith(".", StringComparison.Ordinal))
+                host = host.Substring(0, host.Length - 1);
+            authority = host + port;
+        }
+
+        return string.Concat(
+            url.Substring(0, authorityStart),
+            authority,
+            url.Substring(authorityEnd));
     }
 
     private static bool ContainsAny(string text, params string[] markers)

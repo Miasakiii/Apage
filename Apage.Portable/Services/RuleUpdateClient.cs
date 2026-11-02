@@ -40,55 +40,70 @@ namespace Apage.Portable.Services
                 throw new InvalidOperationException("规则源必须是 HTTPS 地址。");
             }
 
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var request = (HttpWebRequest)WebRequest.Create(uri);
-            request.Method = "GET";
-            request.UserAgent = "Apage/0.1 (manual rule update)";
-            request.Accept = "text/plain";
-            request.AllowAutoRedirect = true;
-            request.MaximumAutomaticRedirections = 3;
-            request.Timeout = (int)RequestTimeout.TotalMilliseconds;
-            request.ReadWriteTimeout = (int)RequestTimeout.TotalMilliseconds;
-            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-
-            using var registration = cancellationToken.Register(() =>
-            {
-                try { request.Abort(); }
-                catch { /* Abort 竞态可忽略 */ }
-            });
-
             try
             {
-                using var response = (HttpWebResponse)request.GetResponse();
-
-                // 重定向后必须仍是 HTTPS，避免被降级到明文
-                var finalUri = response.ResponseUri;
-                if (finalUri == null ||
-                    !string.Equals(finalUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("规则源重定向到非 HTTPS 地址，已拒绝。");
-                }
-
-                if (response.ContentLength > MaxBytesPerSource)
-                    throw new InvalidOperationException("规则文件超过大小上限。");
-
-                using var stream = response.GetResponseStream()
-                    ?? throw new InvalidOperationException("规则源返回空响应流。");
-                using var buffer = new MemoryStream();
-                var chunk = new byte[81920];
-                var total = 0;
-                int read;
-                while ((read = stream.Read(chunk, 0, chunk.Length)) > 0)
+                var current = uri;
+                for (var hop = 0; ; hop++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    total += read;
-                    if (total > MaxBytesPerSource)
-                        throw new InvalidOperationException("规则文件超过大小上限。");
-                    buffer.Write(chunk, 0, read);
-                }
+                    if (!string.Equals(current.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("规则源必须是 HTTPS 地址。");
 
-                return Encoding.UTF8.GetString(buffer.ToArray());
+                    var request = CreateRequest(current);
+                    using var registration = cancellationToken.Register(() =>
+                    {
+                        try { request.Abort(); }
+                        catch { /* Abort 竞态可忽略 */ }
+                    });
+
+                    using var response = (HttpWebResponse)request.GetResponse();
+
+                    if (IsRedirect(response.StatusCode))
+                    {
+                        if (hop >= 3)
+                            throw new InvalidOperationException("规则源重定向次数超过上限。");
+
+                        var location = response.Headers["Location"];
+                        if (string.IsNullOrWhiteSpace(location) ||
+                            !Uri.TryCreate(current, location, out var next) ||
+                            !string.Equals(next.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                        {
+                            // 关键：AllowAutoRedirect=false，任何 HTTP 跳点都不会被实际请求。
+                            throw new InvalidOperationException("规则源重定向到非 HTTPS 地址，已拒绝。");
+                        }
+
+                        current = next;
+                        continue;
+                    }
+
+                    // 防御性复核最终实际响应地址；正常路径每次请求前已校验。
+                    var finalUri = response.ResponseUri;
+                    if (finalUri == null ||
+                        !string.Equals(finalUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException("规则源重定向到非 HTTPS 地址，已拒绝。");
+                    }
+
+                    if (response.ContentLength > MaxBytesPerSource)
+                        throw new InvalidOperationException("规则文件超过大小上限。");
+
+                    using var stream = response.GetResponseStream()
+                        ?? throw new InvalidOperationException("规则源返回空响应流。");
+                    using var buffer = new MemoryStream();
+                    var chunk = new byte[81920];
+                    var total = 0;
+                    int read;
+                    while ((read = stream.Read(chunk, 0, chunk.Length)) > 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        total += read;
+                        if (total > MaxBytesPerSource)
+                            throw new InvalidOperationException("规则文件超过大小上限。");
+                        buffer.Write(chunk, 0, read);
+                    }
+
+                    return Encoding.UTF8.GetString(buffer.ToArray());
+                }
             }
             catch (WebException ex) when (cancellationToken.IsCancellationRequested)
             {
@@ -99,5 +114,26 @@ namespace Apage.Portable.Services
                 throw new InvalidOperationException("规则下载失败：" + ex.Status, ex);
             }
         }
+
+        private static HttpWebRequest CreateRequest(Uri uri)
+        {
+            var request = (HttpWebRequest)WebRequest.Create(uri);
+            request.Method = "GET";
+            request.UserAgent = "Apage/0.1 (manual rule update)";
+            request.Accept = "text/plain";
+            // 禁止内核自动跟随：每一跳都必须先验证 HTTPS 才能发出下一请求。
+            request.AllowAutoRedirect = false;
+            request.Timeout = (int)RequestTimeout.TotalMilliseconds;
+            request.ReadWriteTimeout = (int)RequestTimeout.TotalMilliseconds;
+            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+            return request;
+        }
+
+        private static bool IsRedirect(HttpStatusCode statusCode) =>
+            statusCode == HttpStatusCode.MovedPermanently ||
+            statusCode == HttpStatusCode.Found ||
+            statusCode == HttpStatusCode.SeeOther ||
+            statusCode == HttpStatusCode.TemporaryRedirect ||
+            (int)statusCode == 308; // Permanent Redirect 在旧版 .NET Framework 枚举中可能缺失
     }
 }

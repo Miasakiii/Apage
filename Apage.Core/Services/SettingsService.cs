@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Apage.Core.Models;
@@ -8,8 +7,8 @@ namespace Apage.Core.Services;
 
 /// <summary>
 /// 设置持久化：System.Text.Json 序列化到注入的文件路径（便携数据目录下的 settings.json）。
-/// 原子写：先写 .tmp 再替换目标文件，避免崩溃/断电留下半截 JSON。
-/// 路径完全由外部注入，本服务不感知 AppPaths。
+/// 原子写统一交给 <see cref="AtomicJsonStore"/>：正式文件损坏或缺失时按 .bak/.tmp 恢复，
+/// 绝不以“删除唯一正式副本”作为降级策略。路径完全由外部注入，本服务不感知 AppPaths。
 /// </summary>
 public sealed class SettingsService
 {
@@ -29,53 +28,28 @@ public sealed class SettingsService
     }
 
     /// <summary>
-    /// 加载设置。文件缺失返回默认值；JSON 损坏/读取失败同样回落默认值
-    /// （便携场景宁可重置设置，也不能启动失败）。
+    /// 加载设置。文件缺失、JSON 损坏或读取失败均回落默认值；
+    /// 正式文件不可用时会尝试 .bak / .tmp，避免一次非原子中断导致整份设置丢失。
     /// 设置文件极小且位于首屏关键路径：同步读取，避免首次启动等待线程池调度。
     /// </summary>
     public Task<AppSettings> LoadAsync()
     {
-        try
+        if (AtomicJsonStore.TryReadJson<AppSettings>(_filePath, JsonOptions, out var loaded) &&
+            loaded != null)
         {
-            if (File.Exists(_filePath))
-            {
-                var json = File.ReadAllText(_filePath);
-                Current = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
-            }
+            Current = loaded;
         }
-        catch (Exception ex) when (ex is JsonException || ex is IOException || ex is UnauthorizedAccessException)
+        else
         {
             Current = new AppSettings();
         }
         return Task.FromResult(Current);
     }
 
-    /// <summary>保存当前设置（原子写：.tmp → 替换正式文件）。目录不存在时自动创建。</summary>
+    /// <summary>保存当前设置（原子写：临时文件 → 原子替换；失败时保留旧文件与 .bak）。</summary>
     public async Task SaveAsync()
     {
         var json = JsonSerializer.Serialize(Current, JsonOptions);
-        var dir = Path.GetDirectoryName(_filePath);
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
-
-        var tmpPath = _filePath + ".tmp";
-        await Task.Run(() =>
-        {
-            File.WriteAllText(tmpPath, json);
-            try
-            {
-                if (File.Exists(_filePath))
-                    File.Replace(tmpPath, _filePath, null); // 原子替换
-                else
-                    File.Move(tmpPath, _filePath);
-            }
-            catch (Exception ex) when (ex is IOException || ex is PlatformNotSupportedException || ex is UnauthorizedAccessException)
-            {
-                // 部分文件系统（如 exFAT U 盘）不支持 ReplaceFile，降级为删除后移动
-                if (File.Exists(_filePath))
-                    File.Delete(_filePath);
-                File.Move(tmpPath, _filePath);
-            }
-        }).ConfigureAwait(false);
+        await AtomicJsonStore.SaveAsync(_filePath, json).ConfigureAwait(false);
     }
 }

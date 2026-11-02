@@ -16,7 +16,7 @@ namespace Apage.Portable;
 internal static class WebUiAssets
 {
     /// <summary>资产版本：改动 webui 内容时 +1，触发重新抽取。</summary>
-    private const string Version = "1";
+    private const string Version = "2";
 
     /// <summary>参与抽取的文件清单（与 Assets\webui\ 实际文件一一对应）。</summary>
     private static readonly string[] Files = { "index.html", "app.js", "style.css", "tokens.css", "error.html" };
@@ -26,9 +26,6 @@ internal static class WebUiAssets
 
     /// <summary>新标签页 index.html 的完整 file:// URI：空白标签的导航目标；会话保存时排除（与 about: 同等对待）。</summary>
     public static string IndexUri => IndexUriLazy.Value;
-
-    /// <summary>webui 目录的 file:// URI（以 / 结尾）：新标签页消息门控的前缀比对基准（§4.2）。</summary>
-    public static string FolderUri => new Uri(Folder.TrimEnd('\\', '/') + Path.DirectorySeparatorChar).AbsoluteUri;
 
     /// <summary>webui 落盘目录（{数据目录}\webui；data/ 已被 .gitignore 忽略，不会入库）。</summary>
     public static string Folder => Path.Combine(AppPaths.DataDirectory, "webui");

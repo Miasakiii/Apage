@@ -10,11 +10,11 @@ namespace Apage.Core.Services;
 
 /// <summary>
 /// 隐私拦截统计持久化（docs/design/2026-10-23-privacy-stats-ntp.md §3.2）。
-/// 按周统计广告规则拦截数与第三方 Cookie 剥离数，JSON 落盘到注入路径（{数据目录}\privacy-stats.json）。
-/// 原子写与损坏回落同 <see cref="SettingsService"/> / <see cref="SessionService"/>：
-/// 便携场景宁可丢一次统计，也不能启动失败。
+/// 当前只统计广告规则拦截数，按周（周一 00:00 本地）落盘到注入路径。
+/// TrackersBlocked 字段仅为旧 JSON 兼容保留，不再增长、不再展示：
+/// 事件级第三方 Cookie 删除已被真机探针证伪（docs/spikes/results/cookie-privacy.md）。
 /// 写入策略：计数在锁内累加并标脏；首次变更后短周期自动原子落盘，正常退出再显式
-/// <see cref="SaveAsync"/>。崩溃最多损失一个自动保存批次，而不是整周统计。
+/// <see cref="SaveAsync"/>。崩溃最多损失一个自动保存批次。
 /// </summary>
 public sealed class PrivacyStatsService : IDisposable
 {
@@ -53,7 +53,7 @@ public sealed class PrivacyStatsService : IDisposable
         _autoSaveTimer = new Timer(_ => _ = FlushDirtyAsync(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
-    /// <summary>当前统计快照 (广告拦截数, 第三方 Cookie 剥离数)，供 WebMessage 回复（§3.2）。</summary>
+    /// <summary>当前统计快照（广告拦截数, 旧追踪计数字段）；追踪值不再增长，仅兼容旧文件。</summary>
     public (long Ads, long Trackers) Snapshot
     {
         get
@@ -83,24 +83,9 @@ public sealed class PrivacyStatsService : IDisposable
     /// </summary>
     public async Task LoadAsync()
     {
-        PrivacyStatsState loaded;
-        try
-        {
-            if (File.Exists(_filePath))
-            {
-                var json = await Task.Run(() => File.ReadAllText(_filePath)).ConfigureAwait(false);
-                loaded = JsonSerializer.Deserialize<PrivacyStatsState>(json) ?? new PrivacyStatsState();
-            }
-            else
-            {
-                loaded = new PrivacyStatsState();
-            }
-        }
-        catch (Exception ex) when (ex is JsonException || ex is IOException || ex is UnauthorizedAccessException)
-        {
-            // 损坏/读取失败：宁可回落全新状态，也不能启动失败
-            loaded = new PrivacyStatsState();
-        }
+        var loaded = AtomicJsonStore.TryReadJson<PrivacyStatsState>(_filePath, JsonOptions, out var value)
+            ? value ?? new PrivacyStatsState()
+            : new PrivacyStatsState();
 
         var rolled = loaded.RolledOver(DateTime.Now);
         await _saveGate.WaitAsync().ConfigureAwait(false);
@@ -120,8 +105,8 @@ public sealed class PrivacyStatsService : IDisposable
     }
 
     /// <summary>
-    /// 保存当前统计（原子写：.tmp → 替换正式文件，exFAT 降级同 <see cref="SettingsService"/>）。
-    /// 多次并发保存由信号量串行化，避免共享 .tmp 互相覆盖。目录不存在时自动创建。
+    /// 保存当前统计。写入委托 <see cref="AtomicJsonStore"/>：Replace 不可用时先备份旧文件，
+    /// 不再采用“删除正式文件再移动”的非原子降级。并发保存由信号量串行化。
     /// </summary>
     public async Task SaveAsync()
     {
@@ -137,29 +122,7 @@ public sealed class PrivacyStatsService : IDisposable
             }
 
             var json = JsonSerializer.Serialize(snapshot, JsonOptions);
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir))
-                Directory.CreateDirectory(dir);
-
-            var tmpPath = _filePath + ".tmp";
-            await Task.Run(() =>
-            {
-                File.WriteAllText(tmpPath, json);
-                try
-                {
-                    if (File.Exists(_filePath))
-                        File.Replace(tmpPath, _filePath, null); // 原子替换
-                    else
-                        File.Move(tmpPath, _filePath);
-                }
-                catch (Exception ex) when (ex is IOException || ex is PlatformNotSupportedException || ex is UnauthorizedAccessException)
-                {
-                    // 部分文件系统（如 exFAT U 盘）不支持 ReplaceFile，降级为删除后移动
-                    if (File.Exists(_filePath))
-                        File.Delete(_filePath);
-                    File.Move(tmpPath, _filePath);
-                }
-            }).ConfigureAwait(false);
+            await AtomicJsonStore.SaveAsync(_filePath, json).ConfigureAwait(false);
 
             lock (_gate)
             {
@@ -182,7 +145,7 @@ public sealed class PrivacyStatsService : IDisposable
         MarkDirty(state => state with { AdsBlocked = state.AdsBlocked + count });
     }
 
-    /// <summary>记录第三方 Cookie 剥离次数（锁内自增；先按当前时间滚存，跨周则归零重启）。</summary>
+    /// <summary>旧追踪计数入口，仅为历史数据兼容与回归保留；产品代码不得再调用。</summary>
     public void RecordTrackerBlocked(int count = 1)
     {
         if (count <= 0)

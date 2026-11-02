@@ -2,9 +2,16 @@
 
 > 内部文档 | 更新：2026-11-02
 >
-> 当前执行状态：**S0–S3 功能包（D1/A1/B1/C1/A2/D2/B2/A3/S3）已完成；Ctrl+F 与 Toast airspace 修复已落地；进入 S4**。`build\package.ps1` 产出 **4,060,160 字节 / 1 文件**、版本 0.1.0.0 的未签名单 EXE；Core 单测 **287 绿**，五信号 smoke、数据往返与布局探针通过。2026-11-02 在开机后约 33%–36% CPU 负载下测得首启 1077.5ms、热启中位 939.15ms，**条件通过**本机 1000ms 门禁，仍需参考机与签名后复验。
+> 当前执行状态：**S0–S3 功能包已完成，P0/P1 硬化切片已落地，进入 S4**。硬化后单文件 **4,068,352 字节 / 1 文件**（`package.ps1 -SkipStartupBench` 验收）；Core 单测 **305 绿**，五条红线、五信号 smoke、数据往返与布局探针通过。2026-11-02 在开机后约 33%–36% CPU 负载下测得首启 1077.5ms、热启中位 939.15ms，**条件通过**本机 1000ms 门禁，仍需参考机与签名后复验。
 >
-> 剩余任务以 [v0.1 发布收敛计划](design/2026-10-28-v01-release-convergence.md) 第九节为执行清单；S3 收尾与启动复验见 [S4 启动复验记录](design/2026-11-02-s4-startup-recheck.md)，S2 各包证据见 [S2 第一批](design/2026-10-29-s2-first-slice.md)、[A2](design/2026-10-29-a2-psl-rule-snapshot.md)、[D2](design/2026-10-29-d2-release-engineering.md) 与 [B2/A3](design/2026-10-29-b2-data-a3-rule-update.md)。以下为阶段规划与历史变更记录，实际完成状态以代码和验收结果为准。
+> 剩余任务以 [v0.1 发布收敛计划](design/2026-10-28-v01-release-convergence.md) 第九节为执行清单；P0/P1 硬化见 [硬化记录](design/2026-11-02-p0-p1-hardening.md)，Cookie 探针见 [结果](spikes/results/cookie-privacy.md)，S4 启动复验见 [记录](design/2026-11-02-s4-startup-recheck.md)。
+>
+> v1.6 变更（P0/P1 硬化，2026-11-02）：
+> - **第三方 Cookie 隔离下架**：真机探针证明 `WebResourceRequested` 删除 Cookie 后网络栈仍重新附加；字段默认 false，设置/追踪统计/NTP/隐私盾与宣传同步移除
+> - 请求管线区分顶层主文档与 iframe Document；下载按 id 串行、终态不可回退；单条取消不再全表清理
+> - 会话恢复完成前关闭不覆盖 session；设置/会话/统计统一 `AtomicJsonStore`
+> - 规则更新保留用户规则、全程串行、逐跳验证 HTTPS；NTP 严格校验 `e.Source`，URL 去除 userinfo，日志原子导出，ABP authority 归一
+> - 修复红线脚本根路径误判；Core 单测 305 项
 >
 > v1.5 变更（S3 收尾与 S4 启动复验，2026-11-02）：
 > - S3 余项完成：Ctrl+F 页内查找、Toast 改 Popup 解决 airspace，smoke 增加查找/提示布局探针
@@ -39,8 +46,8 @@
 > v1.0 变更（隐私统计 + 新标签页 + 隐私设置消费方接线；设计见 [design/2026-10-23-privacy-stats-ntp.md](design/2026-10-23-privacy-stats-ntp.md)）：
 > - 隐私拦截统计落地：Core 新增 PrivacyStatsService / PrivacyStatsState（周一 00:00 本地为周边界、原子写、损坏回落、锁内自增），持久化到 {数据目录}\privacy-stats.json，正常退出时保存；单测累计 131 绿（新增 38）
 > - 新标签页接线：Assets/webui 全套（壁纸/搜索/快捷方式/时钟/统计卡）抽取到 {数据目录}\webui 并经 file:// 导航；空白标签即开新标签页；会话保存排除新标签页（与 about: 同等对待）；ntp 通道 WebMessage 桥（navigate / getStats / openSettings / addShortcut）带 Source 门控——任意网页均可 postMessage，不校验 Source 等于把宿主能力暴露给所有站点
-> - 隐私设置从「基线」变「事实」：DNT / Sec-GPC 头注入、第三方 Cookie 请求侧剥离（末两标签近似 registrable domain，多级后缀已知漏判限制，PSL 列后续）、WebRTC IP 防护经 AdditionalBrowserArguments 生效；BrowserTabContext 注入包取代 BrowserTabView 的 Lifecycle/AdBlock 双属性
-> - 统计口径：广告数 = 规则拦截次数；追踪数 = 第三方 Cookie 剥离次数（按规则来源分流列后续）；崩溃丢失当次计数（退出才落盘）已明示
+> - 隐私设置从「基线」变「事实」（历史）：DNT / Sec-GPC 头注入、WebRTC IP 防护经 AdditionalBrowserArguments 生效；第三方 Cookie 请求侧剥离已于 2026-11-02 经探针证伪并移除
+> - 统计口径（历史，2026-11-02 已废止追踪数）：广告数 = 规则拦截次数；原“追踪数 = 第三方 Cookie 剥离次数”经真机证伪后移除；崩溃丢失当次计数（退出才落盘）已明示
 > - 体积补测（Spike 4 兑现）：当时便携目录 2.99MB / 30 文件 < 5MB；2026-10-29 S1 完成独立单文件验证，随后 D1 完成生产接入（见顶部 v1.1）
 > - Phase 0 补记：WebMessageSpike 历史运行 FAIL 归因为脚手架缺陷（对 async 函数未取回 Promise resolve 值，SDK 只做结果 JSON 编码），非通信链路缺陷，修法见 [spikes/results/webmessage.md](spikes/results/webmessage.md)；ExtensionSpike 无运行日志，MV3 实测全部标注未确证，见 [spikes/results/extension.md](spikes/results/extension.md)——两个 spike 维持未勾选待补跑（**已于 2026-10-26 补跑转绿，见下一条与 Phase 0 勾选**）
 > - Phase 0 补跑（2026-10-26）：WebMessage 六断言全绿 PASS（A2 并发 20 乱序 20/20 正确关联，resolutionOrder 严格逆序；100 次往返 p95=0.2ms、max=3.3ms；document-start 注入桥可用）；ExtensionSpike 补 `AreBrowserExtensionsEnabled=true`（默认 false，不开则 0x80070032 一律拒绝）后全矩阵跑通——MV3 可装/可枚举/可启停/可卸载，**最小 MV2 亦被接受**，「仅 MV3」口径按预案修正为「本地侧载扩展，须 Environment 创建时显式开启」（决策 #5、product-design 痛点 5/R3、Phase 8 同步更新）
@@ -119,7 +126,7 @@
 - [x] WebView2 运行时检测与缺失引导（R1；注册表探测 + 中文引导面板，手动下载，绝不静默联网下载）
 - [x] 缓存位置策略：默认宿主机 %TEMP%，可选纯便携模式（R7）
 - [x] 单文件技术验证（独立 spike）——2026-10-29 实测 **2,950,144 字节 / 1 文件**，WPF/Core/WebView2/SQLite 可用，损坏原生缓存可自愈、只读程序目录可运行；该结果不代表生产打包完成
-- [x] 生产 `Apage.Portable` 单文件接入与发布实测——D1 完成打包链；当前 4,060,160 字节 / 版本 0.1.0.0。最终签名与签名后复验仍归 S4
+- [x] 生产 `Apage.Portable` 单文件接入与发布实测——D1 完成打包链；当前 4,068,352 字节 / 版本 0.1.0.0。最终签名与签名后复验仍归 S4
 
 **交付物**：能输入 URL 并浏览网页的单文件 EXE（便携版，U盘即插即用）
 
@@ -165,7 +172,7 @@
 - [x] 新标签页 UI（壁纸+搜索+快捷方式+时钟）——v1.0 接线：webui 资产抽取到 {数据目录}\webui，空白标签经 file:// 导航；搜索/快捷方式经 ntp 桥交宿主导航（Source 门控）
 - [x] 壁纸设置（选择本地图片 / 拖拽设置）——6 张内置渐变 + 本地图片选择 + 拖入即设；localStorage 持久（file:// 下禁用时自动降级）
 - [x] 搜索引擎切换——新标签页内循环切换（百度→必应→Google）；Omnibox 引擎仍取设置项 SearchEngine
-- [x] 隐私统计卡片（本周拦截追踪/广告计数，纯本地数据）——**v0.1 首发差异化，最便宜、感知最强，确保随首发交付**→ v1.0 真实数据：PrivacyStatsService 按周（周一 00:00 本地）统计，广告=规则拦截、追踪=三方 Cookie 剥离，经 getStats 桥实时下发；openSettings/addShortcut 桩待 Phase 6/4 后续
+- [x] 隐私统计卡片（本周广告拦截计数，纯本地数据）——v1.0 起按周（周一 00:00 本地）统计广告规则拦截；2026-11-02 起移除无有效能力支撑的“追踪”计数，经 getStats 桥实时下发；openSettings/addShortcut 桩待 Phase 6/4 后续
 
 **交付物**：带壁纸与隐私统计的新标签页，拖拽即可设置壁纸
 
@@ -177,7 +184,7 @@
 
 - [x] ABP 规则解析引擎（子串索引；规则正则统一 MatchTimeout 防 ReDoS，对应 R8）——v0.6 落地，spike 实证见 [spikes/results/adblock.md](spikes/results/adblock.md)
 - [x] WebResourceRequested 拦截（网络规则）——带 RequestSourceKinds 三参过滤器（跨源 iframe 不漏拦）；主文档不拦
-- [x] 第三方 Cookie 控制（请求剥 Cookie + 响应剥 Set-Cookie 可选）——请求侧已落地（A2 起使用随包 PSL 精确判定，仅子资源；响应侧剥离与按站点开关仍待，见 product-design §5.2 实现现状）
+- [ ] 第三方 Cookie 控制——**v0.1 不交付**：真机探针证明 `WebResourceRequested` 删除 Cookie 后 WebView2 网络栈仍会重新附加（见 [cookie-privacy](spikes/results/cookie-privacy.md)）；不保留死开关或统计口径，后续仅在 Runtime 提供可验证平台入口时重启
 - [x] DNT/Sec-GPC 头注入
 - [x] WebRTC IP 泄露防护（disable_non_proxied_udp，按站点开关）——环境级参数已生效；按站点开关仍待
 - [x] 内置离线规则快照——A2：EasyList/EasyPrivacy 兼容子集 94,646 条，来源/日期/哈希/许可/跳过报告完整，PSL 与规则加载前校验
@@ -196,7 +203,7 @@
 - [x] 设置面板——C1 完成真实窗口，工具栏菜单与 NTP `openSettings` 已接通；保存失败回滚，无死开关
 - [x] Ctrl+F 页内查找——S3 完成：Popup 规避 WebView2 airspace，输入去抖、Enter/Shift+Enter、Esc 关闭，附布局探针
 - [x] 本地滚动日志 + 手动导出（R10）——C1 完成；默认脱敏 URL/Cookie、异常不写 Message、IO 失败不拖垮应用
-- [x] 单文件发布（portable EXE）——D1 完成 `build\package.ps1`；当前 4,060,160 字节 / 版本 0.1.0.0
+- [x] 单文件发布（portable EXE）——D1 完成 `build\package.ps1`；当前 4,068,352 字节 / 版本 0.1.0.0
 - [ ] 代码签名（SignPath.io，对应 R9）+ 签名后同产物复验——D2 已准备申请/工作流/验证脚本，实际签名归 S4
 - [ ] 测试 + 修复
 - [ ] 首次发布 v0.1
@@ -304,6 +311,7 @@
 | 21 | 反调试过滤产品边界 | 仅调试辅助，不提供破解能力 | 与「隐私默认全开」同为产品红线：不做绕过登录/DRM/付费校验/验证码；「默认关」是边界的结构性保障 |
 | 22 | 第三方域名判定 | 随包 PSL 快照求 eTLD+1；失败回退末两标签 | 精确处理 `co.uk` 等多级后缀；IP/localhost/非法输入仍按漏判方向；v0.1 不联网更新 PSL |
 | 23 | 内置规则快照边界 | 仅无 `$` 修饰符的 URL 网络规则；regex/化妆/条件规则跳过并记账 | 引擎不能完整求值的规则不得退化后宽泛拦截；快照按 CC BY-SA 3.0 分发并随包许可 |
+| 24 | 第三方 Cookie 防护口径 | v0.1 不提供；旧字段默认关、无 UI/统计/宣传 | 真机探针证明事件内删除 Cookie 后网络栈仍重新附加；宁可诚实缺失，不保留“假防护”。见 [cookie-privacy](spikes/results/cookie-privacy.md) |
 
 ---
 
