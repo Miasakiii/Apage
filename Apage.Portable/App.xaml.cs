@@ -87,13 +87,20 @@ namespace Apage.Portable
 
             StartupMetrics.Mark("SettingsAndStatsReady");
 
-            // WebRTC IP 泄露防护（§5.2）：Environment 创建时一次性生效（普通/隐私环境同参数，§4.4）
-            var webrtcArgs = _services.Settings.Current.WebRTCIPProtection
-                ? "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
-                : null;
+            // 内核命令行参数收口（R1）：stock 开关常驻 + WebRTC IP 防护按设置生效；
+            // 非 stock 开关不传（会被内核静默忽略，制造虚假安全感，见 BrowserArguments.ForbiddenSwitches）
+            var browserArgs = BrowserArguments.Build(_services.Settings.Current);
+            if (BrowserArguments.HasExternalOverride(Environment.GetCommandLineArgs()))
+            {
+                // --edge-webview-switches 优先级高于 AdditionalBrowserArguments（微软文档）：
+                // 外部注入会覆盖上面的收口配置，只记本地日志告警，不静默继续
+                _services.LocalLog.Write(
+                    LocalLogLevel.Warning, "browser-args",
+                    "external --edge-webview-switches detected; Apage browser arguments may be overridden");
+            }
 
             // 内核生命周期门面：普通标签共享同一 Environment（Phase 2 多标签复用同一内核，省内存）
-            _lifecycle = BrowserTabView.CreateLifecycleService(webrtcArgs);
+            _lifecycle = BrowserTabView.CreateLifecycleService(browserArgs);
             StartupMetrics.Mark("LifecycleReady");
 
             // 新标签页资产落盘（§4.3）：空白标签的导航目标须在窗口创建前就绪
