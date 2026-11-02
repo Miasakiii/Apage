@@ -2,7 +2,7 @@
 
 > 内部文档 | 更新：2026-11-02
 >
-> 当前执行状态：**S0–S3 功能包已完成，P0/P1 硬化与自动 S4 验证已落地；正式打包通过，但首启仍超 1s，完整发布未放行**。Phase A（R1–R4/R11）已落地，当前单文件 **4,152,832 字节 / 1 文件**（图标资产优化后，开发目标 4.25MB 内；硬顶 5MB），Core 单测 **385 绿**，五条红线、许可、五信号 smoke、数据往返、布局/NTP 探针与首启零非白名单出站探针通过。启动门禁在本机当前用户负载（视频播放）下 warm median 1086.85ms 未过 1000ms——属既有 S4 参考机复验项，不放宽阈值、不伪达标。正式单文件 3 轮：首启 1026.2ms、热启中位 959.25ms（门禁 <1000ms，仅热启口径）；仍需参考机、真机点击、exFAT 与签名复验。
+> 当前执行状态：**S0–S3 完成；参考仓库调研与优化方案 Phase 0–D 已实施（2026-11-02，R1–R11 + quickWins + bangs + MorphCore pilot，见 [实施记录](design/2026-11-02-reference-repo-optimization.md)）；正式打包通过，但首启仍超 1s，完整发布未放行**。Phase A（R1–R4/R11）已落地，当前单文件 **4,152,832 字节 / 1 文件**（图标资产优化后，开发目标 4.25MB 内；硬顶 5MB），Core 单测 **385 绿**，五条红线、许可、五信号 smoke、数据往返、布局/NTP 探针与首启零非白名单出站探针通过。启动门禁在本机当前用户负载（视频播放）下 warm median 1086.85ms 未过 1000ms——属既有 S4 参考机复验项，不放宽阈值、不伪达标。正式单文件 3 轮：首启 1026.2ms、热启中位 959.25ms（门禁 <1000ms，仅热启口径）；仍需参考机、真机点击、exFAT 与签名复验。
 >
 > 剩余任务以 [v0.1 发布收敛计划](design/2026-10-28-v01-release-convergence.md) 第九节为执行清单；P0/P1 硬化见 [硬化记录](design/2026-11-02-p0-p1-hardening.md)，Cookie 探针见 [结果](spikes/results/cookie-privacy.md)，S4 启动复验见 [记录](design/2026-11-02-s4-startup-recheck.md)。
 >
@@ -315,6 +315,10 @@
 | 25 | NTP 统计卡 | 下线；周拦截计数保留在隐私盾面板 | 代码已移除 stats-card 与 getStats 桥；计数口径与落盘不变，文档同步纠偏（[favicon/图标实施记录](design/2026-11-02-favicon-outbound-app-icon.md) 同批次审计发现） |
 | 26 | 内核命令行参数 | 收敛为单一受控常量（BrowserArguments），只传 stock 开关 | ungoogled 清单化方法论；非 stock 开关被内核静默忽略会造成虚假安全感，禁止清单由单测把守，真机探针证实生效（[browser-arguments](spikes/results/browser-arguments.md)） |
 | 27 | 出站验证 | 首启零非白名单出站作为冒烟门禁（outbound-probe.ps1） | 把「零后台请求」从口号变成证据；WebView2 Runtime 诊断端点不可控，加白必须是显式记录动作 |
+| 28 | 误伤治理模型 | 全局默认 → 按站点覆盖 → 彻底关闭；站点级绝不回写全局默认值（专测把守） | Brave Shields 两层模型；解决「误伤只能整体降级隐私」与隐私默认红线冲突。本期只做整轴关闭——引擎不区分广告/跟踪规则，按轴待规则来源分类（R5） |
+| 29 | bangs 边界 | 本地静态表 + 纯模板展开 + 用户主动导航；否决原方案的 SearchEngineHosts 白名单约束 | 红线 4 管应用自发请求（HttpClient 类），不管地址栏用户回车导航；白名单约束会扼杀站点直达型（!gh/!w/!yt），与 bangs 核心价值矛盾（R8，2026-11-02 用户决策） |
+| 30 | MorphCore 范围 | pilot：Spring driver + Menu↔Close 一对；WPF 帧成本人工验收后再定是否补齐 | spike 验证核心数学可行（Procrustes 精确、弧线误差 0.0011）；完整版 +40~80KB IL 会逼近 4.25MB 余量，小步验证是负责任路径（R10，2026-11-02 用户决策） |
+| 31 | 信誉检查 opt-out | 维持现状：R1 flag 层默认关闭 + 文档如实披露，不加 API 层开关 | flag/API 双重控制的交互语义未文档化（flag 关闭时 IsReputationCheckingRequired=true 能否恢复 SmartScreen 无官方说明）；避免制造「开关状态与实际行为不符」的新型虚假宣传（R12，2026-11-02 用户决策） |
 
 ---
 
@@ -332,3 +336,30 @@
 | 壁纸系统 + 隐私盾拦截计数 | Apage 原创 |
 | 脚本管理器（GM_* 运行时 + 管理 UI） | Apage 原创设计（详见 script-manager.md） |
 | F12 DevTools 接入 + 反调试过滤 | WebView2 原生 DevTools（F12/Ctrl+Shift+I/OpenDevToolsWindow）+ Apage 原创注入层（复用脚本注入管线，Phase 7d） |
+
+
+---
+
+## 已评估、不采纳（rejectedIdeas 归档，2026-11-02）
+
+> 来源：参考仓库调研（morphicons / ungoogled-chromium / brave-browser / helium / supermium）+
+> 优化方案评审。以下方向经评估明确不采纳，记录理由以避免后续会话反复尝试同一批方案。
+
+| 想法 | 不采纳理由 |
+|---|---|
+| Brave 级指纹防护（farbling / WebGL / WebGPU / Canvas / WebAudio 噪音注入） | 需改写 Chromium 渲染器与 GPU 参数查询路径，WebView2 壳层结构上无路径；JS 注入会显著推高体积冲击 <5MB 红线。Apage 隐私叙事止步于「网络层拦截 + 头部信号 + WebRTC IP」，任何「Brave 级指纹防护」表述即虚假宣传 |
+| 实心图标 region 变形（distance field → marching squares） | 与 42 个图标统一的线性风格冲突；等价 +5.4KB JS 的 C# 复杂度；官方 held-out 实测 3.8–4.5% 图标对中途溢墨；收益不成立。纯 stroke morph core 已覆盖状态切换场景（pilot 已落地） |
+| 独立「遥测端点名单」请求级拦截（qjz9zk 思想的壳层等价物） | 名单维护是永续负担且必然不全，最易产生虚假安全感；写入 ABP 快照会污染规则许可与体积账本。以出站证据门禁（outbound-probe.ps1）替代——用可验证的出站计数说话 |
+| 接入 adblock-rust（经 FFI 替换自研 ABP 引擎） | 需独立原生互操作层，与 Apage.Core 的 netstandard2.0 约束冲突，并会与 Costura 单文件及 5MB 门禁正面冲突。Firefox 149 已集成只证明引擎与壳层解耦程度高，不证明适配 WebView2 宿主 |
+| ungoogled 内核级机制（GN flags / pruning.list 二进制剪枝 / qjz9zk 域名替换 / ungoogled 自有 chrome://flags / Bromite canvas 噪声补丁 / 非 stock feature 名如 NoReferrers） | WebView2 Runtime 是微软预编译 evergreen 二进制，Apage 无源码与构建入口，物理上不可得。其中非 stock 开关传给 WebView2 会被静默忽略，造成「配置看起来很硬、实际全被忽略」的虚假安全感——比不传更有害 |
+| 对齐 ungoogled 的默认值（退出清空所有 Cookie / 默认无搜索引擎 / 强制弹窗转标签页） | 与 Apage ClearOnExit / OnlineSearchSuggestions 默认 false 的隐私红线正面冲突。可借的只是「默认禁用、按需启用」原则，不是具体默认值 |
+| 关闭 WebView2 / Edge 的必需诊断数据 | 微软文档明确 WebView2「无论 Windows 诊断数据设置如何」都会收集性能/可靠性所需数据，宿主仅能控制 SmartScreen 与自定义崩溃报告。技术上不可达，已按决策 #31 在能力边界声明中如实披露 |
+| 重新接线或宣传 BlockThirdPartyCookies / 事件级第三方 Cookie 删除 | 2026-11-02 真机探针已证伪：WebResourceRequested 内能读能删，但 WebView2 网络栈随后会重新附加 Cookie。AGENTS.md 明令不得重新接线或宣传；仅在 Runtime 提供可验证平台入口时重启 |
+| 引入 Brave P3A 或任何使用统计 / 产品分析回路 | 与 Apage 零遥测红线正面冲突。借鉴 Shields 时只取技术层，不取其数据层 |
+| maskTarget / canvasTarget 适配器（morphicons） | 对应 Web 的 CSS-mask 图标场景，WPF 无对应物，无落地路径 |
+| 化妆规则（## / #@#）以注入脚本 + MutationObserver 落地 | 壳层注入点在文档创建早期而非渲染前，广告先渲染再隐藏（FOUC）是结构性劣势；严格 CSP 站点可能阻断注入；全文档 MutationObserver 在重页面有性能成本。维持 roadmap 既有的「后置 Phase 7+」决定 |
+| R12：API 层信誉检查开关（IsReputationCheckingRequired=false 设置项） | flag 层已默认关闭且文档已如实披露（决策 #31）；flag/API 双重控制交互语义未文档化，避免「开关状态与实际行为不符」的新型虚假宣传 |
+| bangs 目标主机 SearchEngineHosts 白名单硬约束（原方案写法） | 把「用户主动导航」误当作「应用出站」：红线 4 管应用自发请求，地址栏回车导航与直接输入网址无异。该约束会扼杀站点直达型 bangs 的核心价值（决策 #29） |
+| MorphCore 完整版（8 对全量移植）作为当期范围 | 用户决策先做 pilot（Menu↔Close 一对，决策 #30）；WPF 每帧 StreamGeometry 的 GC 与帧成本需人工验收，小步验证后再决定是否补齐 |
+
+**维持不变**：S5 用户脚本最小内核（Spike 5 先行、v0.1 后启动、不得反向挤占发布闭环）与 Phase 7d（F12 DevTools + 反调试过滤）按原计划顺序推进，不与上述归档项争抢人力。

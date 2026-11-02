@@ -109,6 +109,7 @@ build\preflight.ps1
 | 站点图标本地缓存口径与真机证据（不新增网络请求） | [docs/spikes/results/favicon-cache.md](docs/spikes/results/favicon-cache.md) |
 | 内核命令行参数收口真机验证（stock 开关生效证据） | [docs/spikes/results/browser-arguments.md](docs/spikes/results/browser-arguments.md) |
 | favicon 出站路径与品牌图标接入实施记录 | [docs/design/2026-11-02-favicon-outbound-app-icon.md](docs/design/2026-11-02-favicon-outbound-app-icon.md) |
+| 参考仓库调研与优化方案实施记录（R1–R11、决策 #25–#31、rejectedIdeas 归档） | [docs/design/2026-11-02-reference-repo-optimization.md](docs/design/2026-11-02-reference-repo-optimization.md) |
 | S4 硬化验证（真实更新、网络采样、SQLite/缓存/只读故障） | [docs/design/2026-11-02-s4-hardening-validation.md](docs/design/2026-11-02-s4-hardening-validation.md) |
 | S2 第一批实施记录（D1/A1/B1/C1 证据、限制与下一波） | [docs/design/2026-10-29-s2-first-slice.md](docs/design/2026-10-29-s2-first-slice.md) |
 | A2 PSL 与离线规则快照（来源、筛选、许可、体积） | [docs/design/2026-10-29-a2-psl-rule-snapshot.md](docs/design/2026-10-29-a2-psl-rule-snapshot.md) |
