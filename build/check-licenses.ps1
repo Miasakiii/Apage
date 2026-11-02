@@ -16,6 +16,20 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $failures = New-Object System.Collections.Generic.List[string]
 
+# ---- 图标资源微门禁（R11）：Icons.xaml 是 StreamGeometry 文本资产，超限通常意味着
+# 误把位图/内联数据塞进了图标字典。当前约 9KB，门禁 32KB 留足扩充余量；
+# 新增图标走 tools\IconTools\svg-to-path.ps1 转换并登记上游许可归属。
+$iconsPath = Join-Path $root 'Apage.Portable\Themes\Icons.xaml'
+if (-not (Test-Path -LiteralPath $iconsPath)) {
+    $failures.Add('missing icon dictionary: Apage.Portable\Themes\Icons.xaml')
+}
+else {
+    $iconsBytes = (Get-Item -LiteralPath $iconsPath).Length
+    if ($iconsBytes -gt 32768) {
+        $failures.Add("Icons.xaml too large: $iconsBytes bytes > 32768 budget (R11 icon micro-gate)")
+    }
+}
+
 function Require-Text {
     param(
         [string]$RelativePath,

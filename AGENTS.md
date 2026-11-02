@@ -107,6 +107,8 @@ build\preflight.ps1
 | P0/P1 硬化记录（Cookie 能力纠偏、下载/会话/原子写/规则更新修复） | [docs/design/2026-11-02-p0-p1-hardening.md](docs/design/2026-11-02-p0-p1-hardening.md) |
 | Cookie 真机探针结论（事件级删除无效证据与复现） | [docs/spikes/results/cookie-privacy.md](docs/spikes/results/cookie-privacy.md) |
 | 站点图标本地缓存口径与真机证据（不新增网络请求） | [docs/spikes/results/favicon-cache.md](docs/spikes/results/favicon-cache.md) |
+| 内核命令行参数收口真机验证（stock 开关生效证据） | [docs/spikes/results/browser-arguments.md](docs/spikes/results/browser-arguments.md) |
+| favicon 出站路径与品牌图标接入实施记录 | [docs/design/2026-11-02-favicon-outbound-app-icon.md](docs/design/2026-11-02-favicon-outbound-app-icon.md) |
 | S4 硬化验证（真实更新、网络采样、SQLite/缓存/只读故障） | [docs/design/2026-11-02-s4-hardening-validation.md](docs/design/2026-11-02-s4-hardening-validation.md) |
 | S2 第一批实施记录（D1/A1/B1/C1 证据、限制与下一波） | [docs/design/2026-10-29-s2-first-slice.md](docs/design/2026-10-29-s2-first-slice.md) |
 | A2 PSL 与离线规则快照（来源、筛选、许可、体积） | [docs/design/2026-10-29-a2-psl-rule-snapshot.md](docs/design/2026-10-29-a2-psl-rule-snapshot.md) |
