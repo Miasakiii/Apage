@@ -1314,7 +1314,37 @@ namespace Apage.Portable
             }
         }
 
-        private void MenuButton_Click(object sender, RoutedEventArgs e) => OpenSettings();
+        // 「⋯」主菜单（R10 pilot）：切换 MenuPopup 开合，MenuMorphIcon 随开合做 Menu↔Close 形变。
+        // 此前该按钮直接打开设置；现补上 frontend-design §5.4 要求的主菜单（书签/历史/下载/设置）。
+        private void MenuButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (MenuPopup.IsOpen)
+            {
+                MenuPopup.IsOpen = false;
+            }
+            else
+            {
+                MenuPopup.IsOpen = true;
+                MenuMorphIcon.ShowTo = true;
+            }
+        }
+
+        private void MenuPopup_Closed(object? sender, EventArgs e)
+        {
+            // 关闭（点按外部或任一项后）即翻回 Menu 图标
+            MenuMorphIcon.ShowTo = false;
+        }
+
+        private void MenuBookmarks_Click(object sender, RoutedEventArgs e) =>
+            OpenLibrary(LibraryWindow.LibraryTab.Bookmarks);
+
+        private void MenuHistory_Click(object sender, RoutedEventArgs e) =>
+            OpenLibrary(LibraryWindow.LibraryTab.History);
+
+        private void MenuDownloads_Click(object sender, RoutedEventArgs e) =>
+            OpenLibrary(LibraryWindow.LibraryTab.Downloads);
+
+        private void MenuSettings_Click(object sender, RoutedEventArgs e) => OpenSettings();
 
         private void OpenSettings()
         {

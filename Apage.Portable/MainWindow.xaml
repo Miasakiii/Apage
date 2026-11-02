@@ -94,7 +94,12 @@
                     <Button x:Name="MenuButton" Width="32" Height="32" Margin="4,0,0,0"
                             Style="{DynamicResource Apage.Style.Button.Icon}" ToolTip="设置"
                             Click="MenuButton_Click">
-                        <Path Style="{StaticResource Apage.Style.Icon}" Data="{StaticResource Apage.Geo.Menu}"/>
+                        <!-- R10 pilot：Menu↔Close 形变（菜单开合状态）。ShowTo 由代码后置切换，
+                             降级路径（几何解析失败/子路径数不一/reduced-motion）自动回落静态切换 -->
+                        <controls:MorphIcon x:Name="MenuMorphIcon"
+                                            FromData="M4,7 L20,7 M4,12 L20,12 M4,17 L20,17"
+                                            ToData="M6,6 L18,18 M18,6 L6,18"
+                                            ShowTo="False"/>
                     </Button>
                 </StackPanel>
             </Grid>
@@ -102,6 +107,30 @@
 
         <!-- 第 3 行：网页内容区（多标签宿主：TabManager 为每个标签在此放一个 BrowserTabView，仅当前可见） -->
         <Grid Grid.Row="2" x:Name="TabHost"/>
+
+        <!-- 「⋯」主菜单（R10 pilot 的 MorphIcon 开合状态载体）：Popup 浮在工具栏按钮上方。
+             与查找条同理用 Popup：WPF 覆盖元素会被 WebView2（HwndHost）盖住（airspace）。
+             点按图标或任一项后关闭；MenuMorphIcon.ShowTo 随开合翻转做 Menu↔Close 形变。 -->
+        <Popup x:Name="MenuPopup" Grid.Row="2"
+               Placement="Relative" PlacementTarget="{Binding ElementName=MenuButton}"
+               HorizontalOffset="-108" VerticalOffset="38"
+               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade"
+               Closed="MenuPopup_Closed">
+            <Border MinWidth="160" Padding="4" CornerRadius="8"
+                    Background="{DynamicResource Apage.Brush.Surface}"
+                    BorderBrush="{DynamicResource Apage.Brush.Border}" BorderThickness="1">
+                <StackPanel>
+                    <Button Content="书签" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Click="MenuBookmarks_Click"/>
+                    <Button Content="历史" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Margin="0,2,0,0" Click="MenuHistory_Click"/>
+                    <Button Content="下载" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Margin="0,2,0,0" Click="MenuDownloads_Click"/>
+                    <Button Content="设置…" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Margin="0,2,0,0" Click="MenuSettings_Click"/>
+                </StackPanel>
+            </Border>
+        </Popup>
 
         <!-- 页内查找条（S3）：Ctrl+F 打开，浮在内容区右上角；状态文案由 Apage.Core.FindBarState 决定。
              用 Popup 而非 Grid 覆盖层：WebView2 是 HwndHost 子窗口（airspace），
