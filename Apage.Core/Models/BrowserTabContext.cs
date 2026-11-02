@@ -50,4 +50,10 @@ public sealed class BrowserTabContext
     /// （DNT/GPC 等声明性头仍发送——它们不构成拦截）。未装配时全部站点走全局默认。
     /// </summary>
     public SiteShieldStore? SiteShields { get; set; }
+
+    /// <summary>
+    /// 便携站点允许清单（R7，{数据目录}\allowlist.txt 明文配置）。
+    /// 命中清单的站点同样跳过拦截与计数，供企内网/离线机随分发预置。未装配时空清单。
+    /// </summary>
+    public SiteAllowList? SiteAllowList { get; set; }
 }

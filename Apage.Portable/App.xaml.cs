@@ -21,6 +21,7 @@ namespace Apage.Portable
         private AppServices? _services;
         private BrowserLifecycleService? _lifecycle;
         private SiteShieldStore? _siteShields;
+        private SiteAllowList? _siteAllowList;
         private bool _smokeMode;
 
         protected override void OnStartup(StartupEventArgs e)
@@ -99,6 +100,10 @@ namespace Apage.Portable
                 // 覆盖表读取失败不影响浏览：保持空表（全部站点走全局默认）
             }
 
+            // 便携站点允许清单（R7）：{数据目录}\allowlist.txt 明文配置，缺失即空清单
+            _siteAllowList = new SiteAllowList(Path.Combine(AppPaths.DataDirectory, "allowlist.txt"));
+            _siteAllowList.Load();
+
             // 内核命令行参数收口（R1）：stock 开关常驻 + WebRTC IP 防护按设置生效；
             // 非 stock 开关不传（会被内核静默忽略，制造虚假安全感，见 BrowserArguments.ForbiddenSwitches）
             var browserArgs = BrowserArguments.Build(_services.Settings.Current);
@@ -129,6 +134,8 @@ namespace Apage.Portable
                 Favicons = new FaviconStore(Path.Combine(AppPaths.DataDirectory, "favicons")),
                 // 按站点隐私覆盖（R5）：后台加载，未就绪前查询回落空表（全部站点走全局默认）
                 SiteShields = _siteShields,
+                // 便携站点允许清单（R7）：命中清单的站点同样关闭防护
+                SiteAllowList = _siteAllowList,
             };
             // 内置 PSL/规则与用户规则在窗口首帧后加载（MainWindow.InitializeTabsAsync），
             // 避免 2MB+ 快照解析阻塞 ContentRendered。

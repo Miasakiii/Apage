@@ -513,8 +513,10 @@ public partial class BrowserTabView : UserControl
             {
                 // R5 按站点覆盖：用户彻底关闭该站点防护时，拦截与计数都不生效。
                 // 声明性头（DNT/GPC）不构成拦截，仍照常发送（见上方步骤 1）。
+                // R7 便携允许清单命中同样跳过（企内网/离线机随分发预置）。
                 var shields = Context?.SiteShields;
-                if (shields == null || !shields.IsDisabled(HostOf(uri)))
+                var allowListed = Context?.SiteAllowList?.IsShieldsDisabled(HostOf(uri)) == true;
+                if ((shields == null || !shields.IsDisabled(HostOf(uri))) && !allowListed)
                 {
                     var kind = BlockedResponse.For(e.ResourceContext.ToString());
                     var (status, reason) = BlockedResponse.Status(kind);
