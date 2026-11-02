@@ -1,3 +1,8 @@
 # 换行符策略：仓库统一存 LF；Windows 检出按平台转 CRLF（此前无 .gitattributes/autocrlf，导致工作区 CRLF 被整树误报为已修改）。
 # text=auto：文本文件提交时 CRLF→LF；二进制（含 NUL）自动识别为 binary，不做转换。
 * text=auto
+
+# 隐私资产是 SHA-256 校验的数据文件：任何平台不得做行尾归一化。
+# text=auto 会把存储的 LF 在 Windows 检出为 CRLF（CI runner autocrlf=true），
+# 导致 check-licenses.ps1 的 PSL/规则哈希校验失败（PR #2 CI 事故的根因）。
+Apage.Core/Resources/Privacy/** -text
