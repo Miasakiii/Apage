@@ -55,6 +55,9 @@ namespace Apage.Portable
 
         private BrowserTabView? _findTab;
 
+        // R6 页级拦截计数：徽章挂载在活动标签上，切标签改挂，避免旧标签计数残留
+        private BrowserTabView? _pageBlocksTab;
+
         // 只有成功读取并应用上次会话后才允许覆盖 session.json。
         // 启动加载期间关闭窗口、或恢复异常时保持旧文件不变，避免空/半份快照覆盖完整会话。
         private bool _sessionRestoreCompleted;
@@ -690,6 +693,32 @@ namespace Apage.Portable
             Omnibox.SetUrl(cur.Url);
             Title = string.IsNullOrWhiteSpace(cur.Title) ? "Apage" : cur.Title + " — Apage";
             TabStrip.ScrollToTab(cur); // 新建/切换后把当前标签滚入视区，杜绝被裁到屏外
+
+            // R6：徽章跟随活动标签（含新标签首次挂载）
+            AttachPageBlocksTab();
+        }
+
+        // R6：把页级拦截计数事件挂到当前标签视图；切标签时先摘旧挂新，避免计数串台。
+        private void AttachPageBlocksTab()
+        {
+            var view = _tabs?.Current?.View;
+            if (ReferenceEquals(_pageBlocksTab, view))
+                return;
+
+            if (_pageBlocksTab != null)
+                _pageBlocksTab.PageBlocksChanged -= OnPageBlocksChanged;
+            _pageBlocksTab = view;
+            if (view != null)
+                view.PageBlocksChanged += OnPageBlocksChanged;
+
+            Omnibox.BlockedCount = view?.PageBlocks.Count ?? 0;
+        }
+
+        private void OnPageBlocksChanged(object? sender, EventArgs e)
+        {
+            if (sender is BrowserTabView view && !ReferenceEquals(view, _tabs?.Current?.View))
+                return; // 非活动标签的计数不写徽章
+            Omnibox.BlockedCount = _tabs?.Current?.View?.PageBlocks.Count ?? 0;
         }
 
         // 退出时保存会话（隐私标签已在 CaptureSession 内排除）与隐私统计（§3.2）；同步等待写完再关闭

@@ -36,6 +36,22 @@ public partial class BrowserTabView : UserControl
     private bool _findActive;
     private string? _pendingUrl;
 
+    /// <summary>
+    /// 页级拦截计数（R6）：本页命中拦截规则的次数。随顶层导航归零，
+    /// 宿主（Omnibox 徽章）经 <see cref="PageBlocksChanged"/> 刷新。
+    /// </summary>
+    private readonly PageBlockCounter _pageBlocks = new();
+
+    /// <summary>页级拦截计数（只读暴露给宿主绑定徽章）。</summary>
+    public PageBlockCounter PageBlocks => _pageBlocks;
+
+    /// <summary>页级拦截计数变化（宿主刷新徽章用）。</summary>
+    public event EventHandler? PageBlocksChanged
+    {
+        add => _pageBlocks.Changed += value;
+        remove => _pageBlocks.Changed -= value;
+    }
+
     // 顶层导航 URI 的有界记录：Sec-Fetch-Dest 缺失时作为主文档判定的安全回退。
     private const int TopLevelNavigationMemory = 32;
     private readonly HashSet<string> _topLevelNavigationUris = new(StringComparer.OrdinalIgnoreCase);
@@ -318,7 +334,12 @@ public partial class BrowserTabView : UserControl
 
         // 仅主框架触发 CoreWebView2.NavigationStarting（iframe 走 FrameNavigationStarting）；
         // 记录 URI 供请求管线区分主文档与第三方 iframe 文档。
-        core.NavigationStarting += (s, e) => RememberTopLevelNavigation(e.Uri);
+        // R6：新页面从头累计拦截数（徽章只反映当前页，不与周统计混淆）。
+        core.NavigationStarting += (s, e) =>
+        {
+            RememberTopLevelNavigation(e.Uri);
+            PageBlocks.Reset();
+        };
 
         // 历史记录（B2）：只记成功的顶层导航；隐私标签与本地页面在 RecordHistory 内排除。
         // 顶层导航失败（证书错误、连接中断）不写历史，避免把失败页当成访问记录。
@@ -502,6 +523,7 @@ public partial class BrowserTabView : UserControl
                         kind == BlockedResponse.Kind.Deny ? null : new MemoryStream(BlockedResponse.Payload(kind)),
                         status, reason, BlockedResponse.Headers(kind));
                     Context?.Stats?.RecordAdBlocked();
+                    _pageBlocks.Increment();
                 }
             }
         };

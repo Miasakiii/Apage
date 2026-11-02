@@ -67,6 +67,26 @@ public partial class Omnibox : UserControl
     /// </summary>
     public Func<string, CancellationToken, Task<IReadOnlyList<OmniboxSuggestion>>>? SuggestionProvider { get; set; }
 
+    private int _blockedCount;
+
+    /// <summary>
+    /// 当前页拦截次数（R6）。&gt;0 时地址栏右侧显示盾牌徽章，让用户即时看到防护生效；
+    /// 0 时徽章隐藏——数字只能真实或没有。宿主（MainWindow）在活动标签切换与
+    /// 拦截计数变化时刷新此属性。
+    /// </summary>
+    public int BlockedCount
+    {
+        get => _blockedCount;
+        set
+        {
+            _blockedCount = value < 0 ? 0 : value;
+            BadgeText.Text = _blockedCount > 0
+                ? _blockedCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : string.Empty;
+            Badge.Visibility = _blockedCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     /// <summary>外部回填当前地址（页面 SourceChanged 时）。正在输入（已聚焦）时不覆盖，以免打断用户。</summary>
     public void SetUrl(string url)
     {
