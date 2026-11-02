@@ -236,6 +236,16 @@ public partial class SettingsWindow : Window
             SearchEngineBox.SelectedIndex = 0;
 
         DntToggle.IsChecked = source.SendDoNotTrack;
+        foreach (ComboBoxItem item in ThemeBox.Items)
+        {
+            if (string.Equals(item.Tag as string, source.Theme, StringComparison.OrdinalIgnoreCase))
+            {
+                ThemeBox.SelectedItem = item;
+                break;
+            }
+        }
+        if (ThemeBox.SelectedItem == null)
+            ThemeBox.SelectedIndex = 0;
         GpcToggle.IsChecked = source.SendGPC;
         WebRtcToggle.IsChecked = source.WebRTCIPProtection;
         FetchEngineIconsToggle.IsChecked = source.FetchEngineIcons;
@@ -245,6 +255,7 @@ public partial class SettingsWindow : Window
     private void CaptureUi(AppSettings target)
     {
         target.SearchEngine = (SearchEngineBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "bing";
+        target.Theme = (ThemeBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "system";
         target.SendDoNotTrack = DntToggle.IsChecked == true;
         target.SendGPC = GpcToggle.IsChecked == true;
         target.WebRTCIPProtection = WebRtcToggle.IsChecked == true;

@@ -8,6 +8,7 @@ using Apage.Core.Configuration;
 using Apage.Core.Models;
 using Apage.Core.Services;
 using Apage.Portable.Views;
+using Microsoft.Win32;
 
 namespace Apage.Portable
 {
@@ -82,6 +83,10 @@ namespace Apage.Portable
             AppPaths.PortableCache = _services.Settings.Current.PortableCache;
             AppPaths.EnsureCreated();
 
+            // 外观（quickWin）：点亮 Dark.xaml（此前是全仓零引用的死资源）。
+            // 画刷经 DynamicResource 引用主题色值，替换合并字典中的主题文件即整体换肤。
+            ApplyTheme(_services.Settings.Current.Theme);
+
             // 冒烟/CI 不得触网：关掉引擎图标抓取，让新标签页走「无图标 → 字标」分支。
             // 注意这只影响本次进程，不写回 settings.json。
             if (_smokeMode)
@@ -153,6 +158,52 @@ namespace Apage.Portable
 
             if (_smokeMode)
                 SmokeCheck.Start(this, window); // 看门狗接管：信号齐备/超时后 Shutdown 带退出码
+        }
+
+        /// <summary>
+        /// 按设置应用外观（quickWin：点亮此前零引用的 Dark.xaml）。画刷经 DynamicResource
+        /// 引用主题色值，替换合并字典中的主题文件即整体换肤；设置保存后由 MainWindow 再次调用。
+        /// </summary>
+        /// <param name="theme">system / light / dark；其余值按浅色处理。</param>
+        public static void ApplyTheme(string? theme)
+        {
+            var app = Application.Current;
+            if (app == null)
+                return;
+
+            var effective = theme;
+            if (string.Equals(effective, "system", StringComparison.OrdinalIgnoreCase))
+                effective = IsSystemDarkMode() ? "dark" : "light";
+            var dark = string.Equals(effective, "dark", StringComparison.OrdinalIgnoreCase);
+            var target = new Uri(dark ? "Themes/Dark.xaml" : "Themes/Light.xaml", UriKind.Relative);
+
+            var merged = app.Resources.MergedDictionaries;
+            for (int i = 0; i < merged.Count; i++)
+            {
+                var source = merged[i].Source?.ToString() ?? string.Empty;
+                if (source.EndsWith("Light.xaml", StringComparison.OrdinalIgnoreCase) ||
+                    source.EndsWith("Dark.xaml", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(source, target.ToString(), StringComparison.OrdinalIgnoreCase))
+                        merged[i] = new ResourceDictionary { Source = target };
+                    return;
+                }
+            }
+        }
+
+        // 系统深色模式（HKCU 个性化设置）；读取失败按浅色，与默认浅色一致
+        private static bool IsSystemDarkMode()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                return key?.GetValue("AppsUseLightTheme") is int value && value == 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void HookLocalDiagnostics(LocalLogService logs)

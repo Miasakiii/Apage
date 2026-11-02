@@ -873,13 +873,23 @@ public partial class BrowserTabView : UserControl
     {
         try
         {
-            // csproj 未引用 System.Drawing（不可改），用反射设置 DefaultBackgroundColor=#F7F8FA 防白闪
+            // csproj 未引用 System.Drawing（不可改），用反射设置 DefaultBackgroundColor 防白闪。
+            // 色值取当前主题的 WindowBg（Light=#F7F8FA / Dark=#1B1D21），深色主题不再白闪。
+            var colorResource = Application.Current?.TryFindResource("Apage.Color.WindowBg");
+            byte r = 0xF7, g = 0xF8, b = 0xFA; // 回落浅色基线
+            if (colorResource is System.Windows.Media.Color themeColor)
+            {
+                r = themeColor.R;
+                g = themeColor.G;
+                b = themeColor.B;
+            }
+
             var prop = typeof(Microsoft.Web.WebView2.Wpf.WebView2).GetProperty("DefaultBackgroundColor");
             var fromArgb = prop?.PropertyType.GetMethod("FromArgb", new[] { typeof(int), typeof(int), typeof(int) });
             if (prop == null || fromArgb == null)
                 return;
 
-            var color = fromArgb.Invoke(null, new object[] { 0xF7, 0xF8, 0xFA });
+            var color = fromArgb.Invoke(null, new object[] { (int)r, (int)g, (int)b });
             prop.SetValue(WebView, color);
         }
         catch

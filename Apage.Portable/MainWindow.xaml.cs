@@ -1322,6 +1322,7 @@ namespace Apage.Portable
                 if (window.ShowDialog() == true)
                 {
                     Omnibox.SearchEngine = _services.Settings.Current.SearchEngine;
+                    App.ApplyTheme(_services.Settings.Current.Theme); // 外观即时换肤（画刷走 DynamicResource）
                     _services.LocalLog.Write(LocalLogLevel.Info, "settings", "settings-applied");
                 }
             }
