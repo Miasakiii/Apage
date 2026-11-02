@@ -13,10 +13,17 @@
       4. SQLite initializes (schema/migration path in the real artifact)
       5. PSL and built-in offline rules load after SHA-256 verification
     Exit codes: 0 pass; 2 in-app signal timeout; 3 single-instance conflict;
-    4 WebView2 Runtime missing; anything else = startup crash.
+    4 WebView2 Runtime missing; 5 outbound probe violation; anything else =
+     startup crash.
     An outer timeout kills the process tree if it hangs before the in-app
     watchdog can even start. Run after a successful build (build\build.ps1);
     CI runs it right after the portable build step.
+
+     On pass, an outbound probe (build\outbound-probe.ps1) runs a second
+     --smoke instance and asserts zero non-whitelisted outbound TCP
+     connections from Apage's WebView2 processes (red line: zero background
+     requests; in smoke mode both approved outbound paths are silent by
+     construction). Exit code 5 = violation. Skip with -SkipOutboundProbe.
 
 .EXAMPLE
     build\smoke.ps1                      # Release (default)
@@ -28,7 +35,8 @@ param(
     [string]$Configuration = 'Release',
     [int]$TimeoutSec = 120,
     [string]$MetricsPath,
-    [string]$ExePath
+    [string]$ExePath,
+    [switch]$SkipOutboundProbe
 )
 
 Set-StrictMode -Version Latest
@@ -77,6 +85,14 @@ if ($code -eq 0) {
     Write-Host ("SMOKE PASSED in {0:mm\:ss}: {1}" -f $sw.Elapsed, $meaning) -ForegroundColor Green
     if (-not [string]::IsNullOrWhiteSpace($MetricsPath)) {
         Write-Host "Startup metrics: $MetricsPath"
+    }
+    if (-not $SkipOutboundProbe) {
+        Write-Host "==> Outbound probe (red line: zero background requests)" -ForegroundColor Cyan
+        & (Join-Path $PSScriptRoot 'outbound-probe.ps1') -ExePath $exe
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "SMOKE FAILED: outbound probe violation (exit $LASTEXITCODE)." -ForegroundColor Red
+            exit 5
+        }
     }
     exit 0
 }
