@@ -480,14 +480,22 @@ public partial class BrowserTabView : UserControl
             if (settings.SendGPC)
                 e.Request.Headers.SetHeader("Sec-GPC", "1");
 
-            // 2) 广告拦截：命中规则即 403。
+            // 2) 广告拦截：命中规则即拦截，但不再裸 403（R4）。
             //    只豁免真正的顶层主文档——泛匹配规则误杀主导航的代价过高；
             //    第三方 iframe 的 Document 必须继续参与匹配，否则广告 iframe 会整块绕过。
+            //    空资源策略（image→1x1 透明 GIF、script/stylesheet/font→空流）见
+            //    BlockedResponse（Core 纯逻辑，可单测）：直接失败请求会让页面脚本抛
+            //    未捕获异常导致白屏/破面，返回可解析的空资源能显著降低破面率。
+            //    RecordAdBlocked 统计语义与顶层主文档豁免不变。
             var engine = provider?.Current ?? Context?.AdBlock;
             if (engine != null && !IsTopLevelDocumentRequest(e) && engine.IsBlocked(uri))
             {
-                // 空内容 + 403 即取消该请求（args.Response 一经赋值请求不再放行）
-                e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
+                var kind = BlockedResponse.For(e.ResourceContext.ToString());
+                var (status, reason) = BlockedResponse.Status(kind);
+                // args.Response 一经赋值请求不再放行；Deny 时传 null 流（空内容 + 403）
+                e.Response = core.Environment.CreateWebResourceResponse(
+                    kind == BlockedResponse.Kind.Deny ? null : new MemoryStream(BlockedResponse.Payload(kind)),
+                    status, reason, BlockedResponse.Headers(kind));
                 Context?.Stats?.RecordAdBlocked();
             }
         };
