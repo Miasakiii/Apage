@@ -57,6 +57,9 @@ public partial class BrowserTabView : UserControl
     private readonly HashSet<string> _topLevelNavigationUris = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<string> _topLevelNavigationOrder = new();
 
+    // 站点级防护覆盖的查询键：当前顶层页面主机（不是被请求资源主机）。
+    private string? _topLevelPageHost;
+
     public BrowserTabView()
     {
         InitializeComponent();
@@ -329,14 +332,20 @@ public partial class BrowserTabView : UserControl
 
         // 完整事件链入口（§5.4）：标题 / 地址 / 图标随页面同步
         core.DocumentTitleChanged += (s, e) => TitleChanged?.Invoke(this, core.DocumentTitle);
-        core.SourceChanged += (s, e) => UrlChanged?.Invoke(this, core.Source);
+        core.SourceChanged += (s, e) =>
+        {
+            _topLevelPageHost = HostOf(core.Source);
+            UrlChanged?.Invoke(this, core.Source);
+        };
         core.FaviconChanged += OnFaviconChanged;
 
         // 仅主框架触发 CoreWebView2.NavigationStarting（iframe 走 FrameNavigationStarting）；
         // 记录 URI 供请求管线区分主文档与第三方 iframe 文档。
+        // 站点覆盖同样以顶层页面主机为键：重定向时在首个请求前更新，避免沿用旧页面身份。
         // R6：新页面从头累计拦截数（徽章只反映当前页，不与周统计混淆）。
         core.NavigationStarting += (s, e) =>
         {
+            _topLevelPageHost = HostOf(e.Uri);
             RememberTopLevelNavigation(e.Uri);
             PageBlocks.Reset();
         };
@@ -511,12 +520,13 @@ public partial class BrowserTabView : UserControl
             var engine = provider?.Current ?? Context?.AdBlock;
             if (engine != null && !IsTopLevelDocumentRequest(e) && engine.IsBlocked(uri))
             {
-                // R5 按站点覆盖：用户彻底关闭该站点防护时，拦截与计数都不生效。
+                // R5/R7 按站点覆盖：键是顶层页面主机，而非被请求资源主机。
+                // 页面 A 关闭防护后，A 加载的第三方资源也必须一并放行；
                 // 声明性头（DNT/GPC）不构成拦截，仍照常发送（见上方步骤 1）。
-                // R7 便携允许清单命中同样跳过（企内网/离线机随分发预置）。
-                var shields = Context?.SiteShields;
-                var allowListed = Context?.SiteAllowList?.IsShieldsDisabled(HostOf(uri)) == true;
-                if ((shields == null || !shields.IsDisabled(HostOf(uri))) && !allowListed)
+                // 空主机 fail-closed：无法确认页面身份时不扩大放行范围。
+                var bypassShields = ShieldBypassPolicy.IsBypassed(
+                    _topLevelPageHost, Context?.SiteShields, Context?.SiteAllowList);
+                if (!bypassShields)
                 {
                     var kind = BlockedResponse.For(e.ResourceContext.ToString());
                     var (status, reason) = BlockedResponse.Status(kind);

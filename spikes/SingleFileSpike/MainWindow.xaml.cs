@@ -53,7 +53,7 @@ namespace Apage.Spikes.SingleFile
 
                 // 引用真实 Apage.Core，确保共享层及其依赖也被合并并能在 net48 中加载。
                 var settings = new AppSettings();
-                if (!settings.BlockThirdPartyCookies || !settings.SendDoNotTrack ||
+                if (!settings.SendDoNotTrack ||
                     !settings.SendGPC || !settings.WebRTCIPProtection)
                     throw new InvalidOperationException("Apage.Core privacy defaults were not loaded correctly.");
 

@@ -88,7 +88,6 @@ public sealed class BrowserArgumentsTests
         settings.WebRTCIPProtection = true;
         settings.SendDoNotTrack = true;
         settings.SendGPC = true;
-        settings.ClearOnExit = false;
 
         BrowserArguments.Build(settings);
 
@@ -96,7 +95,6 @@ public sealed class BrowserArgumentsTests
         Assert.True(settings.WebRTCIPProtection);
         Assert.True(settings.SendDoNotTrack);
         Assert.True(settings.SendGPC);
-        Assert.False(settings.ClearOnExit);
     }
 
     [Fact]

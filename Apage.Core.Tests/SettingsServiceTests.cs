@@ -44,7 +44,8 @@ public sealed class SettingsServiceTests : IDisposable
 
         var loaded = await svc.LoadAsync();
 
-        Assert.False(loaded.BlockThirdPartyCookies);
+        Assert.True(loaded.SendDoNotTrack);
+        Assert.True(loaded.WebRTCIPProtection);
         Assert.Equal("bing", loaded.SearchEngine);
         Assert.False(File.Exists(_file)); // 加载缺失文件不应写盘
     }
@@ -55,7 +56,7 @@ public sealed class SettingsServiceTests : IDisposable
         var svc = new SettingsService(_file);
         svc.Current.SearchEngine = "duckduckgo";
         svc.Current.Theme = "dark";
-        svc.Current.ClearOnExit = true;
+        svc.Current.FetchEngineIcons = false;
 
         await svc.SaveAsync();
         Assert.True(File.Exists(_file));
@@ -63,7 +64,27 @@ public sealed class SettingsServiceTests : IDisposable
         var reloaded = await new SettingsService(_file).LoadAsync();
         Assert.Equal("duckduckgo", reloaded.SearchEngine);
         Assert.Equal("dark", reloaded.Theme);
-        Assert.True(reloaded.ClearOnExit);
+        Assert.False(reloaded.FetchEngineIcons);
+    }
+
+    [Fact]
+    public async Task LoadAsync_LegacyDeadSettings_AreIgnoredAndDroppedOnSave()
+    {
+        // v0.1 冻结时移除了三个无消费方的历史字段；旧 settings.json 仍须可读，
+        // 且这些键不得继续出现在新写出的配置中，避免重新形成死开关或假防护。
+        await File.WriteAllTextAsync(_file,
+            "{\"OnlineSearchSuggestions\":true,\"ClearOnExit\":true,\"BlockThirdPartyCookies\":true,\"SearchEngine\":\"google\"}");
+
+        var svc = new SettingsService(_file);
+        var loaded = await svc.LoadAsync();
+
+        Assert.Equal("google", loaded.SearchEngine);
+        await svc.SaveAsync();
+
+        var json = await File.ReadAllTextAsync(_file);
+        Assert.False(json.Contains("OnlineSearchSuggestions", StringComparison.Ordinal));
+        Assert.False(json.Contains("ClearOnExit", StringComparison.Ordinal));
+        Assert.False(json.Contains("BlockThirdPartyCookies", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -74,7 +95,8 @@ public sealed class SettingsServiceTests : IDisposable
         var loaded = await new SettingsService(_file).LoadAsync();
 
         // 损坏文件不得导致抛异常，回落默认（隐私基线）
-        Assert.False(loaded.BlockThirdPartyCookies);
+        Assert.True(loaded.SendDoNotTrack);
+        Assert.True(loaded.WebRTCIPProtection);
         Assert.Equal("bing", loaded.SearchEngine);
     }
 

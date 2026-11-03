@@ -342,7 +342,5 @@ public partial class SettingsWindow : Window
         target.WebRTCIPProtection = source.WebRTCIPProtection;
         target.FetchEngineIcons = source.FetchEngineIcons;
         target.Theme = source.Theme;
-        target.OnlineSearchSuggestions = source.OnlineSearchSuggestions;
-        target.ClearOnExit = source.ClearOnExit;
     }
 }

@@ -5,7 +5,8 @@ using System.IO;
 namespace Apage.Core.Configuration;
 
 /// <summary>
-/// 便携目录解析：data/、wallpapers/ 固定位于 exe 同级，数据跟程序走。
+/// 便携目录解析：data/ 固定位于 exe 同级，数据跟程序走；wallpapers/ 为预留目录
+/// （当前壁纸由新标签页保存在 WebView2 localStorage，不读取此目录）。
 /// 缓存目录遵循风险 R7 策略：默认放宿主机 %TEMP%\Apage\cache（避免 WebView2 海量
 /// 小文件写伤 U盘、拖慢速度）；纯便携模式（<see cref="PortableCache"/> = true）放 exe 同级 cache/。
 /// </summary>
@@ -19,7 +20,7 @@ public static class AppPaths
     /// <summary>用户数据目录（exe 同级 data/）。</summary>
     public static string DataDirectory => Path.Combine(BaseDirectory, "data");
 
-    /// <summary>壁纸目录（exe 同级 wallpapers/）。</summary>
+    /// <summary>预留壁纸目录（exe 同级 wallpapers/；当前壁纸不使用此目录）。</summary>
     public static string WallpapersDirectory => Path.Combine(BaseDirectory, "wallpapers");
 
     /// <summary>纯便携模式缓存目录（exe 同级 cache/）。</summary>

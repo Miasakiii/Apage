@@ -247,10 +247,14 @@ foreach ($prop in 'SendDoNotTrack', 'SendGPC', 'WebRTCIPProtection') {
         $failures.Add("$privacyTestsRel : missing 'Assert.True(...$prop)' - privacy default-ON baseline must stay locked by a unit test assertion")
     }
 }
-# WebView2 无可靠第三方 Cookie 阻断入口；旧字段必须保持关闭，防止重新形成假防护。
+# v0.1 冻结：三个历史字段均无真实消费方，已从 AppSettings 移除。
+# 禁止以“预留开关”形式回潮——无行为的开关会制造虚假能力预期。
+$appSettingsRel = 'Apage.Core\Models\AppSettings.cs'
+$appSettingsPath = Join-Path $root $appSettingsRel
+$appSettingsText = Get-Content -LiteralPath $appSettingsPath -Raw
 foreach ($prop in 'OnlineSearchSuggestions', 'ClearOnExit', 'BlockThirdPartyCookies') {
-    if ($testText -notmatch "Assert\.False\(\s*\w+\.$prop\b") {
-        $failures.Add("$privacyTestsRel : missing 'Assert.False(...$prop)' - privacy default-OFF baseline must stay locked by a unit test assertion")
+    if ($appSettingsText -match "public\s+bool\s+$prop\b") {
+        $failures.Add("$appSettingsRel : dead setting '$prop' must not return without a real consumer, UI and tests")
     }
 }
 
