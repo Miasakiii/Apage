@@ -7,7 +7,7 @@
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6?logo=windows&logoColor=white)
 ![Runtime](https://img.shields.io/badge/.NET%20Framework-4.8-512BD4?logo=.net&logoColor=white)
 ![Single File](https://img.shields.io/badge/Single%20File-%E2%89%884%20MB-success)
-![Tests](https://img.shields.io/badge/Unit%20Tests-474%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/Unit%20Tests-489%20passed-brightgreen)
 
 **超轻量 · 隐私优先 · 全本地化的 Windows 便携浏览器**
 
@@ -83,7 +83,7 @@ WebView2 宿主 · WebMessage 异步桥 · 本地新标签页
 │
 ├── Apage.Core（.NET Standard 2.0 共享层）
 │   ├── Models：设置 / 会话 / 站点覆盖 / 周统计
-│   ├── Services：AdBlock · Privacy · Rule Snapshot · PSL · Session · ScriptMatcher
+│   ├── Services：AdBlock · Privacy · Rule Snapshot · PSL · Session · ScriptManager（元数据 / 匹配 / 注入构建）
 │   └── Data：SQLite 仓储（书签 / 历史 / 下载）
 │
 └── 系统 Edge WebView2 Runtime（Chromium）
@@ -98,7 +98,7 @@ WebView2 宿主 · WebMessage 异步桥 · 本地新标签页
 | 通信 | WebMessage 异步桥（NTP/查找条等本地页面，带 Source 门控） |
 | 存储 | SQLite（书签/历史/下载）+ 原子写 JSON（设置/会话/周统计） |
 | 拦截 | 自研 ABP 兼容引擎：子串索引 + fail-closed 规则边界 + 正则超时 |
-| 共享层 | Apage.Core 纯逻辑（无 Windows 依赖），474 项 xUnit 单测 |
+| 共享层 | Apage.Core 纯逻辑（无 Windows 依赖），489 项 xUnit 单测 |
 
 ## 📊 项目状态
 
@@ -112,12 +112,13 @@ WebView2 宿主 · WebMessage 异步桥 · 本地新标签页
 
 **收尾中（发布前）：**
 
-- 代码签名（SignPath 开源签名计划）与签名后同产物复验
-- 参考机上的启动性能终验（目标：窗口可见 <1 秒）
+- 代码签名（SignPath 开源签名计划）与签名后同产物复验；当前仅有本机自签名演练，尚无可信发布签名
+- 参考机上的启动性能终验（目标：窗口可见 <1 秒）；该门禁由所有者暂缓，阈值未放宽，最终签名产物仍需复测
+- exFAT 物理介质上的便携运行矩阵；本机无 exFAT 卷，自动故障矩阵中该项为跳过而非通过
 
 **v0.1 之后规划：**
 
-- 用户脚本管理器（Tampermonkey 兼容元数据 / GM_* API，一级差异化方向）
+- 用户脚本管理器（Tampermonkey 兼容元数据 / GM_* API，一级差异化方向）：Phase 7a 最小内核已完成离线 Spike 5，验证 document-start 同步 GM 存储、权限门控、桥接令牌、响应头 CSP 与快照刷新（34/34 断言）；生产接入仍需 SQLite 持久化、写入 ACK/重试及管理 UI
 - F12 开发者工具增强 + 反调试过滤（`debugger` 中和，仅调试辅助定位）
 - 化妆规则（`##`）与完整 ABP 引擎、隐私标签、阅读模式、多窗口
 
@@ -133,7 +134,7 @@ WebView2 宿主 · WebMessage 异步桥 · 本地新标签页
 ```powershell
 build\preflight.ps1      # 只读环境预检：确认本机可用的构建路线
 build\build.ps1          # Restore + 构建整解（混合 sln 不支持 dotnet build，请使用本脚本）
-dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj   # 474 项 Core 单测
+dotnet test Apage.Core.Tests/Apage.Core.Tests.csproj   # 489 项 Core 单测
 build\smoke.ps1          # 五信号冒烟 + 数据往返 + 布局探针 + 零出站探针
 build\check-redlines.ps1 # 五条工程红线机械化检查（零遥测/通配符 csproj/隐私默认值等）
 build\check-licenses.ps1 # MIT/MPL/CC 许可全文与隐私资产哈希校验
@@ -143,6 +144,12 @@ build\package.ps1        # 正式单文件打包 + 全部门禁验收 + SHA-256 
 > `Apage.sln` 是「旧式 .NET FX 4.8 + SDK 风格」混合解决方案，`dotnet build Apage.sln` 会失败——这是已知约束，`build\build.ps1` 已自动处理 MSBuild 定位与 SDK 路径回退。
 
 </details>
+
+## 维护约定
+
+- 独立验证项目位于 `spikes/`，清单与运行方式见 [spikes/README.md](spikes/README.md)；这些项目均不加入 `Apage.sln`，不参与生产 EXE 打包。
+- `artifacts/` 为本地发布证据目录，不进入公开仓库。应保留单文件候选、哈希/manifest、启动 waiver、故障矩阵、最终 UI 走查、Spike 结果、许可包与干净候选备份。
+- 旧 UI 走查、旧基准和临时诊断副本可按需清理；`.workbuddy/` 与上述发布证据不参与清理。
 
 **运行时目录结构**（`data/` 等在运行时生成，数据跟程序走）：
 
