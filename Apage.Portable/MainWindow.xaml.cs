@@ -795,22 +795,6 @@ namespace Apage.Portable
             string.Equals(engineId, "google", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(engineId, "duckduckgo", StringComparison.OrdinalIgnoreCase);
 
-        private void HandleShortcut(string action)
-        {
-            switch (action)
-            {
-                case "bookmark":
-                    ToggleBookmark();
-                    break;
-                case "history":
-                    OpenLibrary(LibraryWindow.LibraryTab.History);
-                    break;
-                case "downloads":
-                    OpenLibrary(LibraryWindow.LibraryTab.Downloads);
-                    break;
-            }
-        }
-
         // 窗口级快捷键：焦点在工具栏/地址栏时生效；网页内焦点由 WebView2 AcceleratorKeyPressed 接管
         private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
