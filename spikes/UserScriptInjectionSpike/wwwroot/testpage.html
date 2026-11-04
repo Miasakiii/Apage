@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>User Script Injection Spike</title>
+<script>
+// 页面自己的第一段脚本，不做 await/定时器/延迟等待。
+// 若 document-start 内联 KV 生效，此时结果已同步可读。
+window.__pageProbe = {
+    readyState: document.readyState,
+    scriptARan: !!window.__scriptAResult,
+    text: window.__scriptAResult ? window.__scriptAResult.text : null,
+    initialCounterA: window.__scriptAResult ? window.__scriptAResult.initialCounter : null,
+    initialCounterB: window.__scriptBResult ? window.__scriptBResult.initialCounter : null,
+    noneRan: !!window.__noneResult,
+    cspBlocksEval: (function () {
+        try { new Function('return 1'); return false; } catch (e) { return true; }
+    })()
+};
+
+// 页面后置序列化钩子：尝试在延迟 GM_setValue 的消息序列化过程中嗅探 bridgeToken。
+window.__pageSniff = { hookRan: false, token: null };
+Object.prototype.toJSON = function () {
+    window.__pageSniff.hookRan = true;
+    if (this && this.bridgeToken) window.__pageSniff.token = this.bridgeToken;
+    return Object.assign(Object.create(null), this);
+};
+if (typeof window.__lateSet === 'function') window.__lateSet();
+delete Object.prototype.toJSON;
+window.__pageProbe.serializationHookRan = window.__pageSniff.hookRan;
+window.__pageProbe.sniffedBridgeToken = window.__pageSniff.token;
+
+// 伪造持久化消息：没有宿主登记的 bridgeToken，必须被拒绝。
+try {
+    window.chrome.webview.postMessage({
+        channel: 'script-bridge',
+        api: 'GM_setValue',
+        scriptId: 'script-a',
+        args: { key: 'forged', value: true }
+    });
+} catch (e) { /* 页面探针不依赖桥接可用性 */ }
+</script>
+</head>
+<body style="font-family: sans-serif; margin: 24px; background: #f5f5f5; color: #222;">
+<h1>User Script Injection Spike</h1>
+<p>document-start readyState：<b id="ready-state"></b></p>
+<p>页面首段脚本观察到用户脚本：<b id="script-ran"></b></p>
+<pre id="details"></pre>
+<script>
+document.getElementById('ready-state').textContent = window.__pageProbe.readyState;
+document.getElementById('script-ran').textContent = String(window.__pageProbe.scriptARan);
+document.getElementById('details').textContent = JSON.stringify({
+    page: window.__pageProbe,
+    scriptA: window.__scriptAResult,
+    scriptB: window.__scriptBResult,
+    noGrants: window.__noneResult
+}, null, 2);
+</script>
+</body>
+</html>
