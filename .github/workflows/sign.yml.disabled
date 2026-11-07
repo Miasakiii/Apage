@@ -1,0 +1,106 @@
+# TEMPLATE ONLY - NOT AN ACTIVE WORKFLOW.
+# GitHub Actions loads only *.yml / *.yaml in .github/workflows/, so this
+# .disabled file can never produce a red CI run while SignPath secrets are
+# absent. Rename to sign.yml AFTER the SignPath application is approved and
+# every secret/var below is configured.
+#
+# Official parameter reference (re-verified 2026-11-06):
+#   https://docs.signpath.io/trusted-build-systems/github
+#   https://docs.signpath.io/origin-verification
+#
+# Required repository configuration:
+#   secrets.SIGNPATH_API_TOKEN
+#   vars.SIGNPATH_ORGANIZATION_ID
+#   vars.SIGNPATH_PROJECT_SLUG
+#   vars.SIGNPATH_SIGNING_POLICY_SLUG
+#   vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG  (optional; default config)
+#
+# Origin Verification must be enabled in the SignPath signing policy, with the
+# source repository and allowed branches (main / release/*) bound. The action's
+# github-token needs actions:read and contents:read to read job details and
+# download the unsigned artifact (not documented in the 2026-10-29 draft).
+#
+# Compatibility note: `archive: false` requires a recent upload-artifact v4
+# (4.4+). If the pinned v4 does not support it, either move to the version in
+# the official example (v7), or remove `archive: false` + `skip-decompress`
+# and set the SignPath Artifact Configuration root element to <zip-file>.
+# Validate this template once on a test branch before enabling it on main.
+#
+# The build and package steps MUST run before signing. Never rebuild or
+# replace the EXE after the signing request (see docs/release/signing.md).
+
+name: Release signing (template)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this release is being signed'
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  sign:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET SDK (per global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build solution
+        shell: pwsh
+        run: ./build/build.ps1 -Configuration Release
+
+      - name: Package unsigned single file
+        shell: pwsh
+        run: >-
+          ./build/package.ps1 -SkipBuild -Configuration Release
+          -SkipStartupBench -RequireCleanWorktree
+
+      - name: Upload unsigned EXE (no ZIP)
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: Apage-unsigned-for-signing
+          path: artifacts/portable/Apage.Portable.exe
+          archive: false
+          retention-days: 1
+
+      - name: Submit SignPath signing request
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: artifacts/signed
+          skip-decompress: true
+
+      - name: Post-signing acceptance (evidence collection)
+        shell: pwsh
+        run: >-
+          ./build/verify-release.ps1
+          -ExePath artifacts/signed/Apage.Portable.exe
+          -ReportPath artifacts/signed/release-verification.json
+
+      - name: Upload signed artifact and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Apage-signed
+          path: |
+            artifacts/signed/Apage.Portable.exe
+            artifacts/signed/signature.json
+            artifacts/signed/release-verification.json
+          retention-days: 7
