@@ -112,7 +112,7 @@ WebView2 宿主 · WebMessage 异步桥 · 本地新标签页
 
 **收尾中（发布前）：**
 
-- 代码签名（SignPath 开源签名计划）与签名后同产物复验；当前仅有本机自签名演练，尚无可信发布签名
+- 代码签名（SignPath 开源签名计划）与签名后同产物复验；当前仅有本机自签名演练，尚无可信发布签名。签名后验收链已固化为 `build\verify-release.ps1`，签名 workflow 以禁用态模板待启用
 - 参考机上的启动性能终验（目标：窗口可见 <1 秒）；该门禁由所有者暂缓，阈值未放宽，最终签名产物仍需复测
 - exFAT 物理介质上的便携运行矩阵；本机无 exFAT 卷，自动故障矩阵中该项为跳过而非通过
 
@@ -139,6 +139,7 @@ build\smoke.ps1          # 五信号冒烟 + 数据往返 + 布局探针 + 零�
 build\check-redlines.ps1 # 五条工程红线机械化检查（零遥测/通配符 csproj/隐私默认值等）
 build\check-licenses.ps1 # MIT/MPL/CC 许可全文与隐私资产哈希校验
 build\package.ps1        # 正式单文件打包 + 全部门禁验收 + SHA-256 + legal bundle
+build\verify-release.ps1 # 签名后同产物验收（签名/体积/五信号 smoke/启动/exFAT 证据）
 ```
 
 > `Apage.sln` 是「旧式 .NET FX 4.8 + SDK 风格」混合解决方案，`dotnet build Apage.sln` 会失败——这是已知约束，`build\build.ps1` 已自动处理 MSBuild 定位与 SDK 路径回退。
