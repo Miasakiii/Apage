@@ -251,7 +251,7 @@
                         <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
                                    FontSize="{DynamicResource Apage.FontSize.Xs}"
                                    Foreground="{DynamicResource Apage.Brush.TextTertiary}"
-                                   Text="某个站点被误伤（页面打不开、内容缺失）时，可为该站点单独关闭防护，不影响上面的全局默认开关。关闭后该站点不再拦截广告、也不再计入拦截统计。"/>
+                                   Text="某个站点被误伤（页面打不开、内容缺失）时，可为该站点单独关闭防护，不影响上面的全局默认开关。按页面地址的主机名匹配；关闭后该页面加载的第三方资源也一并放行，并不再计入拦截统计。"/>
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

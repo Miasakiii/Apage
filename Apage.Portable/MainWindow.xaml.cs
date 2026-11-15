@@ -795,22 +795,6 @@ namespace Apage.Portable
             string.Equals(engineId, "google", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(engineId, "duckduckgo", StringComparison.OrdinalIgnoreCase);
 
-        private void HandleShortcut(string action)
-        {
-            switch (action)
-            {
-                case "bookmark":
-                    ToggleBookmark();
-                    break;
-                case "history":
-                    OpenLibrary(LibraryWindow.LibraryTab.History);
-                    break;
-                case "downloads":
-                    OpenLibrary(LibraryWindow.LibraryTab.Downloads);
-                    break;
-            }
-        }
-
         // 窗口级快捷键：焦点在工具栏/地址栏时生效；网页内焦点由 WebView2 AcceleratorKeyPressed 接管
         private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -1214,7 +1198,9 @@ namespace Apage.Portable
             var hostWidth = TabHost.ActualWidth;
             var hostHeight = TabHost.ActualHeight;
 
-            ToastPopup.HorizontalOffset = Math.Max(8, (hostWidth - size.Width) / 2);
+            // Popup 的 Relative 放置以右缘解释 HorizontalOffset；补自身宽度，
+            // 使 Popup 窗口实际左缘落在 (hostWidth - toastWidth) / 2。
+            ToastPopup.HorizontalOffset = Math.Max(8, (hostWidth - size.Width) / 2 + size.Width);
             // 顶部居中（对齐 frontend-design §5.4 规范：下滑 200ms 入场）
             ToastPopup.VerticalOffset = Math.Max(8, 24);
         }
@@ -1296,6 +1282,21 @@ namespace Apage.Portable
                 {
                     detail += "; FAIL=overflows-content-area-y";
                     return false;
+                }
+
+                // 居中门禁：Popup 的 Relative 放置曾把 HorizontalOffset 当右缘，
+                // 只校验「不溢出」会漏掉整体左移。按屏幕坐标锁定真实左缘。
+                var toastWidth = Toast.ActualWidth > 0 ? Toast.ActualWidth : size.Width;
+                if (hostWidth > 0 && toastWidth > 0)
+                {
+                    var expectedLeft = TabHost.PointToScreen(new Point((hostWidth - toastWidth) / 2, 0)).X;
+                    var actualLeft = Toast.PointToScreen(new Point(0, 0)).X;
+                    detail += $"; left expected={expectedLeft:F0}; actual={actualLeft:F0}";
+                    if (Math.Abs(expectedLeft - actualLeft) > 2)
+                    {
+                        detail += "; FAIL=not-centered";
+                        return false;
+                    }
                 }
 
                 HideToast();

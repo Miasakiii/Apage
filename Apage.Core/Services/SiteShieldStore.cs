@@ -19,7 +19,8 @@ namespace Apage.Core.Services;
 /// 红线约束（单测把守）：
 /// ① 站点级关闭绝不回写全局 <see cref="AppSettings"/>——本存储与设置文件物理隔离；
 /// ② 覆盖查询在拦截管线与头注入<b>之前</b>；彻底关闭的站点跳过整个 Web 管道；
-/// ③ host 归一化与 FaviconStore 同构，非法主机拒绝入表。
+/// ③ host 归一化与 FaviconStore 同构，非法主机拒绝入表；
+/// ④ 查询键必须是顶层页面主机，不是被请求资源主机（见 <see cref="ShieldBypassPolicy"/>）。
 /// </para>
 /// </summary>
 public sealed class SiteShieldStore

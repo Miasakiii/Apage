@@ -47,7 +47,8 @@ public sealed class BrowserTabContext
 
     /// <summary>
     /// 按站点隐私覆盖（R5）。站点被用户彻底关闭时，请求管道跳过拦截与计数
-    /// （DNT/GPC 等声明性头仍发送——它们不构成拦截）。未装配时全部站点走全局默认。
+    /// （DNT/GPC 等声明性头仍发送——它们不构成拦截）。键为顶层页面主机，
+    /// 不是资源请求主机；未装配时全部站点走全局默认。
     /// </summary>
     public SiteShieldStore? SiteShields { get; set; }
 
