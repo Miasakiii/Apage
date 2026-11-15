@@ -140,6 +140,7 @@ build\check-redlines.ps1 # 五条工程红线机械化检查（零遥测/通配�
 build\check-licenses.ps1 # MIT/MPL/CC 许可全文与隐私资产哈希校验
 build\package.ps1        # 正式单文件打包 + 全部门禁验收 + SHA-256 + legal bundle
 build\verify-release.ps1 # 签名后同产物验收（签名/体积/五信号 smoke/启动/exFAT 证据）
+build\capability-report.ps1 # 只读聚合 artifacts 证据，标注新鲜度与产物一致性（不做门禁判定）
 ```
 
 > `Apage.sln` 是「旧式 .NET FX 4.8 + SDK 风格」混合解决方案，`dotnet build Apage.sln` 会失败——这是已知约束，`build\build.ps1` 已自动处理 MSBuild 定位与 SDK 路径回退。
@@ -149,8 +150,9 @@ build\verify-release.ps1 # 签名后同产物验收（签名/体积/五信号 sm
 ## 维护约定
 
 - 独立验证项目位于 `spikes/`，清单与运行方式见 [spikes/README.md](spikes/README.md)；这些项目均不加入 `Apage.sln`，不参与生产 EXE 打包。
-- `artifacts/` 为本地发布证据目录，不进入公开仓库。应保留单文件候选、哈希/manifest、启动 waiver、故障矩阵、最终 UI 走查、Spike 结果、许可包与干净候选备份。
-- 旧 UI 走查、旧基准和临时诊断副本可按需清理；`.workbuddy/` 与上述发布证据不参与清理。
+- `artifacts/` 为本地发布证据目录，不进入公开仓库。应保留单文件候选、哈希/manifest、启动 waiver、故障矩阵结果、最终 UI 走查、Spike 结果、许可包、干净候选备份，以及 `test-results/`（单测 TRX）与 `signed/`（签名产物与签名后验收）。
+- `build\capability-report.ps1` 只读聚合上述证据，输出 `artifacts/capability-report.{json,md}`：逐条标注证据新鲜度、产物一致性、无证据支撑的声明与证据间矛盾。它不做门禁判定（pass/fail 仍归 `check-*.ps1` / `package.ps1` / `verify-release.ps1`），可随时重跑，不属于必须保留的证据。
+- 旧 UI 走查、旧基准和临时诊断副本可按需清理；故障矩阵的 `temp/`（WebView2 缓存）与启动基准的 `app/` 属于运行残留，删掉后重跑脚本即可再生，`results.json` / `metrics.json` 才是证据；`.workbuddy/` 与上述发布证据不参与清理。
 
 **运行时目录结构**（`data/` 等在运行时生成，数据跟程序走）：
 
